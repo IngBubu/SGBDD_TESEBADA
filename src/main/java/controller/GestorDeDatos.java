@@ -1,9 +1,6 @@
 package controller;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -32,6 +29,26 @@ public class GestorDeDatos {
         this.executor = Executors.newFixedThreadPool(3);
         this.sqlParser = new SQLaCypher();
     }
+    public String[] obtenerNombresColumnas(String consulta) {
+        try (Connection conexion = ConexionSQLServerNorte.obtenerConexion();
+             Statement stmt = conexion.createStatement();
+             ResultSet rs = stmt.executeQuery(consulta)) {
+
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnas = metaData.getColumnCount();
+            String[] nombresColumnas = new String[columnas];
+
+            for (int i = 0; i < columnas; i++) {
+                nombresColumnas[i] = metaData.getColumnName(i + 1);
+            }
+
+            return nombresColumnas;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return new String[]{"Error"};
+        }
+    }
+
     public void ejecutarConsulta(String sql) {
         executor.execute(() -> {
             try (

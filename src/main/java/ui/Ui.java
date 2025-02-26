@@ -28,14 +28,14 @@ public class Ui extends JFrame {
 
     public Ui() {
         setTitle("Ejecutor de Consultas SGBDD");
-        setSize(600, 400);
+        setSize(800, 500);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
         // Conectar a las bases de datos al iniciar la aplicación
         conectarBasesDeDatos();
 
-        // Inicializar GestorDatos
+        // Inicializar GestorDeDatos
         gestorDatos = new GestorDeDatos();
 
         areaConsulta = new JTextArea(5, 50);
@@ -51,7 +51,7 @@ public class Ui extends JFrame {
         panelTabla = new JScrollPane(tablaResultados);
         add(panelTabla, BorderLayout.CENTER);
 
-        etiquetaEstado = new JLabel("Estado: Esperando consulta");
+        etiquetaEstado = new JLabel("Estado: Esperando consulta...");
         add(etiquetaEstado, BorderLayout.WEST);
 
         // Evento para ejecutar la consulta
@@ -103,8 +103,11 @@ public class Ui extends JFrame {
             new Thread(() -> {
                 try {
                     List<String[]> resultados = futureResultados.get(); // Espera la respuesta
-                    SwingUtilities.invokeLater(() -> actualizarTabla(resultados));
+                    String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
+
+                    SwingUtilities.invokeLater(() -> actualizarTabla(resultados, nombresColumnas));
                 } catch (Exception ex) {
+                    SwingUtilities.invokeLater(() -> etiquetaEstado.setText("Estado: Error en la consulta"));
                     ex.printStackTrace();
                 }
             }).start();
@@ -115,18 +118,13 @@ public class Ui extends JFrame {
         }
     }
 
-    private void actualizarTabla(List<String[]> datos) {
+    private void actualizarTabla(List<String[]> datos, String[] nombresColumnas) {
         if (datos.isEmpty()) {
             etiquetaEstado.setText("Estado: No se encontraron resultados");
             return;
         }
 
-        String[] columnas = new String[datos.get(0).length];
-        for (int i = 0; i < columnas.length; i++) {
-            columnas[i] = "Columna " + (i + 1);
-        }
-
-        DefaultTableModel modelo = new DefaultTableModel(columnas, 0);
+        DefaultTableModel modelo = new DefaultTableModel(nombresColumnas, 0);
         for (String[] fila : datos) {
             modelo.addRow(fila);
         }
