@@ -72,8 +72,20 @@ public class SQLaCypher {
 
     private String convertirDelete(Delete deleteStmt) {
         String tabla = deleteStmt.getTable().getName().toLowerCase();
-        String where = (deleteStmt.getWhere() != null) ? " WHERE " + deleteStmt.getWhere().toString() : "";
 
-        return "MATCH (n:" + tabla + ") " + where + " DELETE n";
+        // Obtener condición WHERE si existe
+        String where = "";
+        if (deleteStmt.getWhere() != null) {
+            where = deleteStmt.getWhere().toString().replace("=", ":"); // Reemplazar "=" por ":"
+            where = where.replaceAll("(\\w+)\\s*:", "n.$1 ="); // Asegurar que las propiedades estén referenciadas con "n."
+        }
+
+        // Construir la consulta Cypher corregida
+        if (!where.isEmpty()) {
+            return "MATCH (n:" + tabla + ") WHERE " + where + " DELETE n";
+        } else {
+            return "MATCH (n:" + tabla + ") DELETE n"; // Borra todos los nodos de la tabla (¡cuidado!)
+        }
     }
+
 }
