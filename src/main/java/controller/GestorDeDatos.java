@@ -50,12 +50,12 @@ public class GestorDeDatos {
         }
         return new String[]{"Error"};
     }
+
     public void ejecutarConsulta(String sql) {
         executor.execute(() -> {
             try {
                 String cypherQuery = sqlParser.convertirSQLaCypher(sql);
 
-                // Ejecutar en todas las conexiones SQL
                 for (Connection conn : conexionesSQL.values()) {
                     try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                         conn.setAutoCommit(false);
@@ -67,7 +67,6 @@ public class GestorDeDatos {
                     }
                 }
 
-                // Ejecutar en todas las conexiones Neo4j
                 for (Session session : conexionesNeo4j.values()) {
                     try {
                         session.run(cypherQuery);
@@ -86,13 +85,14 @@ public class GestorDeDatos {
     public Future<List<String[]>> ejecutarConsultaSelect(String sql) {
         return executor.submit(() -> {
             List<String[]> resultados = new ArrayList<>();
-            String cypherQuery = sqlParser.convertirSQLaCypher(sql);
+            String[] nombresColumnas = obtenerNombresColumnas(sql);
 
             for (Connection conn : conexionesSQL.values()) {
                 resultados.addAll(ejecutarConsultaSQL(conn, sql));
             }
+
             for (Session session : conexionesNeo4j.values()) {
-                resultados.addAll(ejecutarConsultaNeo4j(session, cypherQuery));
+                resultados.addAll(ejecutarConsultaNeo4j(session, sqlParser.convertirSQLaCypher(sql), nombresColumnas));
             }
 
             System.out.println("📊 Registros obtenidos: " + resultados.size());
@@ -118,7 +118,7 @@ public class GestorDeDatos {
         return resultados;
     }
 
-    private List<String[]> ejecutarConsultaNeo4j(Session session, String cypherQuery) {
+    private List<String[]> ejecutarConsultaNeo4j(Session session, String cypherQuery, String[] nombresColumnas) {
         List<String[]> resultados = new ArrayList<>();
         System.out.println("🔎 Consulta ejecutada en Neo4j: " + cypherQuery);
 
@@ -128,13 +128,26 @@ public class GestorDeDatos {
             while (result.hasNext()) {
                 Record record = result.next();
                 if (record.size() > 0) {
-                    Value node = record.get(0); // Obtenemos el nodo
+                    Value node = record.get(0);
 
-                    // Extraer propiedades del nodo
+                    if (!node.hasType(org.neo4j.driver.types.TypeSystem.getDefault().NODE())) {
+                        System.err.println("⚠️ El resultado no es un nodo válido.");
+                        continue;
+                    }
+                    Map<String, Object> propiedades = node.asNode().asMap();
                     List<String> fila = new ArrayList<>();
-                    node.asNode().asMap().forEach((key, value) -> fila.add(value.toString()));
+                    for (String columna : nombresColumnas) {
+                        String columnaNeo4j = columna.toLowerCase(); // Convertir a minúsculas
 
-                    resultados.add(fila.toArray(new String[0])); // Convertir la lista en array
+                        if (propiedades.containsKey(columnaNeo4j)) {
+                            fila.add(String.valueOf(propiedades.get(columnaNeo4j)));
+                        } else {
+                            System.err.println("⚠️ Propiedad no encontrada en Neo4j: " + columnaNeo4j);
+                            fila.add("null"); // Si no se encuentra, devuelve "null"
+                        }
+                    }
+
+                    resultados.add(fila.toArray(new String[0]));
                 }
             }
         } catch (Exception e) {
