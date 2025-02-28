@@ -1,7 +1,4 @@
 
-import repository.ConexionSQLServerCentro;
-import repository.ConexionSQLServerNorte;
-import repository.ConexionNeo4jServerSur;
 import java.sql.Connection;
 import org.neo4j.driver.Session;
 

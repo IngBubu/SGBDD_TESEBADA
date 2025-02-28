@@ -1,5 +1,4 @@
 
-import repository.ConexionNeo4jServerSur;
 import org.neo4j.driver.Session;
 
 public class TestConexionNeo4j {

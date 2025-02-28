@@ -1,114 +1,102 @@
 package controller;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.*;
+import java.util.concurrent.*;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Value;
-import repository.ConexionNeo4jServerSur;
-import repository.ConexionSQLServerCentro;
-import repository.ConexionSQLServerNorte;
 
 public class GestorDeDatos {
-    private ConexionSQLServerCentro conexionSQLCentro;
-    private ConexionSQLServerNorte conexionSQLNorte;
-    private ConexionNeo4jServerSur conexionNeo4j;
     private ExecutorService executor;
     private SQLaCypher sqlParser;
+    private Map<String, Connection> conexionesSQL;
+    private Map<String, Session> conexionesNeo4j;
 
     public GestorDeDatos() {
-        this.conexionSQLCentro = new ConexionSQLServerCentro();
-        this.conexionSQLNorte = new ConexionSQLServerNorte();
-        this.conexionNeo4j = new ConexionNeo4jServerSur();
-        this.executor = Executors.newFixedThreadPool(3);
+        this.executor = Executors.newFixedThreadPool(5);
         this.sqlParser = new SQLaCypher();
+        this.conexionesSQL = new ConcurrentHashMap<>();
+        this.conexionesNeo4j = new ConcurrentHashMap<>();
     }
+
+    public void agregarConexionSQL(String nombre, Connection conexion) {
+        conexionesSQL.put(nombre, conexion);
+        System.out.println("✅ Conexión SQL agregada: " + nombre);
+    }
+
+    public void agregarConexionNeo4j(String nombre, Session session) {
+        conexionesNeo4j.put(nombre, session);
+        System.out.println("✅ Conexión Neo4j agregada: " + nombre);
+    }
+
     public String[] obtenerNombresColumnas(String consulta) {
-        try (Connection conexion = ConexionSQLServerNorte.obtenerConexion();
-             Statement stmt = conexion.createStatement();
-             ResultSet rs = stmt.executeQuery(consulta)) {
+        for (Connection conexion : conexionesSQL.values()) {
+            try (Statement stmt = conexion.createStatement();
+                 ResultSet rs = stmt.executeQuery(consulta)) {
 
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnas = metaData.getColumnCount();
-            String[] nombresColumnas = new String[columnas];
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnas = metaData.getColumnCount();
+                String[] nombresColumnas = new String[columnas];
 
-            for (int i = 0; i < columnas; i++) {
-                nombresColumnas[i] = metaData.getColumnName(i + 1);
+                for (int i = 0; i < columnas; i++) {
+                    nombresColumnas[i] = metaData.getColumnName(i + 1);
+                }
+                return nombresColumnas;
+            } catch (SQLException e) {
+                e.printStackTrace();
             }
-
-            return nombresColumnas;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return new String[]{"Error"};
         }
+        return new String[]{"Error"};
     }
-
     public void ejecutarConsulta(String sql) {
         executor.execute(() -> {
-            try (
-                    Connection connCentro = conexionSQLCentro.obtenerConexion();
-                 Connection connNorte = conexionSQLNorte.obtenerConexion();
-                 Session sessionNeo4j = conexionNeo4j.obtenerSesion()) {
-
-                connCentro.setAutoCommit(false);
-                connNorte.setAutoCommit(false);
-
+            try {
                 String cypherQuery = sqlParser.convertirSQLaCypher(sql);
 
-                try (PreparedStatement stmtCentro = connCentro.prepareStatement(sql);
-                     PreparedStatement stmtNorte = connNorte.prepareStatement(sql)) {
-
-                    stmtCentro.executeUpdate();
-                    stmtNorte.executeUpdate();
-                    sessionNeo4j.run(cypherQuery);
-
-                    connCentro.commit();
-                    connNorte.commit();
-                    System.out.println("✅ Transacción confirmada en todas las bases de datos.");
-                } catch (SQLException e) {
-                    connCentro.rollback();
-                    connNorte.rollback();
-                    System.err.println("❌ Transacción revertida debido a un error: " + e.getMessage());
+                // Ejecutar en todas las conexiones SQL
+                for (Connection conn : conexionesSQL.values()) {
+                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                        conn.setAutoCommit(false);
+                        stmt.executeUpdate();
+                        conn.commit();
+                    } catch (SQLException e) {
+                        conn.rollback();
+                        System.err.println("❌ Error en SQL Server: " + e.getMessage());
+                    }
                 }
-            } catch (SQLException e) {
+
+                // Ejecutar en todas las conexiones Neo4j
+                for (Session session : conexionesNeo4j.values()) {
+                    try {
+                        session.run(cypherQuery);
+                    } catch (Exception e) {
+                        System.err.println("❌ Error en Neo4j: " + e.getMessage());
+                    }
+                }
+
+                System.out.println("✅ Transacción confirmada en todas las bases de datos.");
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         });
     }
 
     public Future<List<String[]>> ejecutarConsultaSelect(String sql) {
-        return executor.submit(new Callable<List<String[]>>() {
-            @Override
-            public List<String[]> call() throws Exception {
-                List<String[]> resultados = new ArrayList<>();
-                try (Connection connCentro = conexionSQLCentro.obtenerConexion();
-                     Connection connNorte = conexionSQLNorte.obtenerConexion()) {
+        return executor.submit(() -> {
+            List<String[]> resultados = new ArrayList<>();
+            String cypherQuery = sqlParser.convertirSQLaCypher(sql);
 
-                    List<String[]> resultadosCentro = ejecutarConsultaSQL(connCentro, sql);
-                    List<String[]> resultadosNorte = ejecutarConsultaSQL(connNorte, sql);
-                    List<String[]> resultadosNeo4j = ejecutarConsultaNeo4j(sql);
-
-                    System.out.println("📊 Registros obtenidos:");
-                    System.out.println("- ZonaCentro: " + resultadosCentro.size());
-                    System.out.println("- ZonaNorte: " + resultadosNorte.size());
-                    System.out.println("- ZonaSur (Neo4j): " + resultadosNeo4j.size()); // Corrección del conteo real
-
-                    resultados.addAll(resultadosCentro);
-                    resultados.addAll(resultadosNorte);
-                    resultados.addAll(resultadosNeo4j);
-
-                    System.out.println("Consulta ejecutada exitosamente.");
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                }
-                return resultados;
+            for (Connection conn : conexionesSQL.values()) {
+                resultados.addAll(ejecutarConsultaSQL(conn, sql));
             }
+            for (Session session : conexionesNeo4j.values()) {
+                resultados.addAll(ejecutarConsultaNeo4j(session, cypherQuery));
+            }
+
+            System.out.println("📊 Registros obtenidos: " + resultados.size());
+            return resultados;
         });
     }
 
@@ -125,34 +113,28 @@ public class GestorDeDatos {
                 resultados.add(fila);
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("❌ Error en consulta SQL Server: " + e.getMessage());
         }
         return resultados;
     }
 
-    private List<String[]> ejecutarConsultaNeo4j(String sql) {
+    private List<String[]> ejecutarConsultaNeo4j(Session session, String cypherQuery) {
         List<String[]> resultados = new ArrayList<>();
-        String cypherQuery = sqlParser.convertirSQLaCypher(sql);
-
         System.out.println("🔎 Consulta ejecutada en Neo4j: " + cypherQuery);
 
-        try (Session session = conexionNeo4j.obtenerSesion()) {
-            if (session == null) {
-                System.err.println("❌ Error: No se pudo establecer la conexión con Neo4j.");
-                return resultados;
-            }
-
+        try {
             Result result = session.run(cypherQuery);
+
             while (result.hasNext()) {
                 Record record = result.next();
-
-                // Extraer propiedades de los nodos
                 if (record.size() > 0) {
-                    Value node = record.get(0);
-                    List<String> fila = new ArrayList<>();
+                    Value node = record.get(0); // Obtenemos el nodo
 
-                    node.asMap().forEach((key, value) -> fila.add(value.toString()));
-                    resultados.add(fila.toArray(new String[0]));
+                    // Extraer propiedades del nodo
+                    List<String> fila = new ArrayList<>();
+                    node.asNode().asMap().forEach((key, value) -> fila.add(value.toString()));
+
+                    resultados.add(fila.toArray(new String[0])); // Convertir la lista en array
                 }
             }
         } catch (Exception e) {
@@ -161,5 +143,11 @@ public class GestorDeDatos {
         }
 
         return resultados;
+    }
+
+
+    public void listarConexiones() {
+        System.out.println("🔍 Conexiones SQL Activas: " + conexionesSQL.keySet());
+        System.out.println("🔍 Conexiones Neo4j Activas: " + conexionesNeo4j.keySet());
     }
 }

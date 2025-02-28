@@ -1,29 +1,20 @@
 package ui;
 
 import controller.GestorDeDatos;
-import org.neo4j.driver.Session;
-import repository.ConexionNeo4jServerSur;
-import repository.ConexionSQLServerCentro;
-import repository.ConexionSQLServerNorte;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.sql.Connection;
 import java.util.List;
 import java.util.concurrent.Future;
 
 public class Ui extends JFrame {
     private JTextArea areaConsulta;
     private JButton botonEjecutar;
+    private JButton botonConfiguraciones;
     private JTable tablaResultados;
     private JScrollPane panelTabla;
     private JLabel etiquetaEstado;
-    private Connection conexionCentro;
-    private Connection conexionNorte;
-    private Session conexionNeo4j;
     private GestorDeDatos gestorDatos;
 
     public Ui() {
@@ -32,15 +23,20 @@ public class Ui extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Conectar a las bases de datos al iniciar la aplicación
-        conectarBasesDeDatos();
-
         // Inicializar GestorDeDatos
         gestorDatos = new GestorDeDatos();
 
+        JPanel panelSuperior = new JPanel(new BorderLayout());
+
         areaConsulta = new JTextArea(5, 50);
         JScrollPane panelConsulta = new JScrollPane(areaConsulta);
-        add(panelConsulta, BorderLayout.NORTH);
+        panelSuperior.add(panelConsulta, BorderLayout.CENTER);
+
+        botonConfiguraciones = new JButton("Configuraciones");
+        botonConfiguraciones.addActionListener(e -> new ConfiguracionUI(this, gestorDatos));
+        panelSuperior.add(botonConfiguraciones, BorderLayout.EAST);
+
+        add(panelSuperior, BorderLayout.NORTH);
 
         JPanel panelBoton = new JPanel();
         botonEjecutar = new JButton("Ejecutar Consulta");
@@ -55,37 +51,9 @@ public class Ui extends JFrame {
         add(etiquetaEstado, BorderLayout.WEST);
 
         // Evento para ejecutar la consulta
-        botonEjecutar.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                ejecutarConsulta();
-            }
-        });
+        botonEjecutar.addActionListener(e -> ejecutarConsulta());
 
         setVisible(true);
-    }
-
-    private void conectarBasesDeDatos() {
-        conexionCentro = ConexionSQLServerCentro.obtenerConexion();
-        conexionNorte = ConexionSQLServerNorte.obtenerConexion();
-        conexionNeo4j = ConexionNeo4jServerSur.obtenerSesion();
-
-        boolean conexionNeo4jValida = false;
-        if (conexionNeo4j != null) {
-            try {
-                conexionNeo4j.run("RETURN 1"); // Prueba de consulta en Neo4j
-                conexionNeo4jValida = true;
-            } catch (Exception e) {
-                System.err.println("❌ Error al conectar a Neo4j: " + e.getMessage());
-                conexionNeo4j = null;
-            }
-        }
-
-        if (conexionCentro != null && conexionNorte != null && conexionNeo4jValida) {
-            System.out.println("✅ Conectado a todas las bases de datos correctamente.");
-        } else {
-            System.err.println("❌ Error al conectar a una o más bases de datos.");
-        }
     }
 
     private void ejecutarConsulta() {
@@ -102,7 +70,7 @@ public class Ui extends JFrame {
 
             new Thread(() -> {
                 try {
-                    List<String[]> resultados = futureResultados.get(); // Espera la respuesta
+                    List<String[]> resultados = futureResultados.get();
                     String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
 
                     SwingUtilities.invokeLater(() -> actualizarTabla(resultados, nombresColumnas));
@@ -111,7 +79,6 @@ public class Ui extends JFrame {
                     ex.printStackTrace();
                 }
             }).start();
-
         } else {
             gestorDatos.ejecutarConsulta(consulta);
             etiquetaEstado.setText("Estado: Consulta ejecutada");
@@ -129,9 +96,5 @@ public class Ui extends JFrame {
             modelo.addRow(fila);
         }
         tablaResultados.setModel(modelo);
-    }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new Ui());
     }
 }

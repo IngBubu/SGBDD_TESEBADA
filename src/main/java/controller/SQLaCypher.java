@@ -1,8 +1,5 @@
 package controller;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.insert.Insert;
@@ -16,7 +13,6 @@ import java.util.stream.Collectors;
 public class SQLaCypher {
     public String convertirSQLaCypher(String sql) {
         try {
-            // Remove the trailing semicolon if present
             if (sql.endsWith(";")) {
                 sql = sql.substring(0, sql.length() - 1);
             }
@@ -42,37 +38,42 @@ public class SQLaCypher {
         String columnas = select.getSelectItems().stream()
                 .map(Object::toString)
                 .collect(Collectors.joining(", "));
-        String where = (select.getWhere() != null) ? " WHERE " + select.getWhere().toString() : "";
-        return "MATCH (n:" + tabla + ") RETURN " + columnas + where;
+
+        // Asegurar que la condición WHERE referencia el alias 'n'
+        String where = "";
+        if (select.getWhere() != null) {
+            where = " WHERE " + select.getWhere().toString().replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");
+        }
+
+        return "MATCH (n:" + tabla + ")" + where + " RETURN n";
     }
+
+
 
     private String convertirInsert(Insert insertStmt) {
         String tabla = insertStmt.getTable().getName().toLowerCase();
-        List<String> columnas = insertStmt.getColumns().stream()
+        String columnas = insertStmt.getColumns().stream()
                 .map(Object::toString)
-                .collect(Collectors.toList());
-        List<String> valores = Arrays.asList(insertStmt.getItemsList().toString().replace("(", "").replace(")", "").split(","));
+                .collect(Collectors.joining(", "));
+        String valores = insertStmt.getItemsList().toString().replace("(", "{").replace(")", "}");
 
-        String atributos = "{" + columnas.stream()
-                .map(c -> c + ": " + valores.get(columnas.indexOf(c)).trim())
-                .collect(Collectors.joining(", ")) + "}";
-
-        return "CREATE (n:" + tabla + " " + atributos + ")";
+        return "CREATE (n:" + tabla + " " + valores + ")";
     }
 
     private String convertirUpdate(Update updateStmt) {
         String tabla = updateStmt.getTable().getName().toLowerCase();
-        List<String> setItems = new ArrayList<>();
-        for (int i = 0; i < updateStmt.getColumns().size(); i++) {
-            setItems.add("n." + updateStmt.getColumns().get(i) + " = " + updateStmt.getExpressions().get(i));
-        }
+        String setClause = updateStmt.getColumns().stream()
+                .map(col -> "n." + col + " = " + updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)))
+                .collect(Collectors.joining(", "));
         String where = (updateStmt.getWhere() != null) ? " WHERE " + updateStmt.getWhere().toString() : "";
-        return "MATCH (n:" + tabla + ") " + where + " SET " + String.join(", ", setItems);
+
+        return "MATCH (n:" + tabla + ") " + where + " SET " + setClause;
     }
 
     private String convertirDelete(Delete deleteStmt) {
         String tabla = deleteStmt.getTable().getName().toLowerCase();
         String where = (deleteStmt.getWhere() != null) ? " WHERE " + deleteStmt.getWhere().toString() : "";
+
         return "MATCH (n:" + tabla + ") " + where + " DELETE n";
     }
 }
