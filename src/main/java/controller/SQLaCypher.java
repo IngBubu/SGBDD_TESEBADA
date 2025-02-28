@@ -1,87 +1,78 @@
 package controller;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.statement.delete.Delete;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.schema.Table;
+import java.util.stream.Collectors;
+
 public class SQLaCypher {
-
     public String convertirSQLaCypher(String sql) {
-        sql = sql.trim().toUpperCase().replace(";", ""); // Elimina el punto y coma
-
-        if (sql.startsWith("SELECT")) {
-            return convertirSelect(sql);
-        } else if (sql.startsWith("INSERT")) {
-            return convertirInsert(sql);
-        } else if (sql.startsWith("UPDATE")) {
-            return convertirUpdate(sql);
-        } else if (sql.startsWith("DELETE")) {
-            return convertirDelete(sql);
-        } else {
-            throw new IllegalArgumentException("Consulta no soportada: " + sql);
+        try {
+            // Remove the trailing semicolon if present
+            if (sql.endsWith(";")) {
+                sql = sql.substring(0, sql.length() - 1);
+            }
+            Statement stmt = CCJSqlParserUtil.parse(sql);
+            if (stmt instanceof Select) {
+                return convertirSelect((Select) stmt);
+            } else if (stmt instanceof Insert) {
+                return convertirInsert((Insert) stmt);
+            } else if (stmt instanceof Update) {
+                return convertirUpdate((Update) stmt);
+            } else if (stmt instanceof Delete) {
+                return convertirDelete((Delete) stmt);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+        return "";
     }
 
-    private String convertirSelect(String sql) {
-        // Manejar diferentes formatos de SELECT
-        if (!sql.contains("FROM")) {
-            throw new IllegalArgumentException("Consulta SELECT mal formada: " + sql);
-        }
-
-        String[] partes = sql.split("FROM");
-        if (partes.length < 2) {
-            throw new IllegalArgumentException("No se encontró la tabla en la consulta SELECT: " + sql);
-        }
-
-        String tabla = partes[1].trim().split(" ")[0]; // Extrae solo el nombre de la tabla sin espacios adicionales
-
-        if (tabla.equalsIgnoreCase("CLIENTES")) {
-            tabla = "clientes"; // Asegura que coincida con la etiqueta en Neo4j
-        }
-
-        return "MATCH (n:" + tabla + ") RETURN n";
+    private String convertirSelect(Select selectStmt) {
+        PlainSelect select = (PlainSelect) selectStmt.getSelectBody();
+        String tabla = ((Table) select.getFromItem()).getName().toLowerCase();
+        String columnas = select.getSelectItems().stream()
+                .map(Object::toString)
+                .collect(Collectors.joining(", "));
+        String where = (select.getWhere() != null) ? " WHERE " + select.getWhere().toString() : "";
+        return "MATCH (n:" + tabla + ") RETURN " + columnas + where;
     }
 
-    private String convertirInsert(String sql) {
-        // INSERT INTO clientes (nombre, edad) VALUES ('Juan', 30)
-        String[] partes = sql.split("VALUES");
-        String tabla = partes[0].split("INTO")[1].split("\\(")[0].trim();
-        String columnas = partes[0].split("\\(")[1].split("\\)")[0].trim();
-        String valores = partes[1].split("\\(")[1].split("\\)")[0].trim();
+    private String convertirInsert(Insert insertStmt) {
+        String tabla = insertStmt.getTable().getName().toLowerCase();
+        List<String> columnas = insertStmt.getColumns().stream()
+                .map(Object::toString)
+                .collect(Collectors.toList());
+        List<String> valores = Arrays.asList(insertStmt.getItemsList().toString().replace("(", "").replace(")", "").split(","));
 
-        String[] columnasArray = columnas.split(",");
-        String[] valoresArray = valores.split(",");
+        String atributos = "{" + columnas.stream()
+                .map(c -> c + ": " + valores.get(columnas.indexOf(c)).trim())
+                .collect(Collectors.joining(", ")) + "}";
 
-        StringBuilder query = new StringBuilder("CREATE (n:" + tabla + " {");
-        for (int i = 0; i < columnasArray.length; i++) {
-            query.append(columnasArray[i].trim()).append(": ").append(valoresArray[i].trim());
-            if (i < columnasArray.length - 1) query.append(", ");
-        }
-        query.append("})");
-
-        return query.toString();
+        return "CREATE (n:" + tabla + " " + atributos + ")";
     }
 
-    private String convertirUpdate(String sql) {
-        // UPDATE clientes SET edad = 35 WHERE nombre = 'Juan'
-        String[] partes = sql.split("SET");
-        String tabla = partes[0].split("UPDATE")[1].trim();
-        String cambios = partes[1].split("WHERE")[0].trim();
-        String condicion = partes.length > 1 ? partes[1].split("WHERE")[1].trim() : "";
-
-        if (tabla.equalsIgnoreCase("CLIENTES")) {
-            tabla = "clientes";
+    private String convertirUpdate(Update updateStmt) {
+        String tabla = updateStmt.getTable().getName().toLowerCase();
+        List<String> setItems = new ArrayList<>();
+        for (int i = 0; i < updateStmt.getColumns().size(); i++) {
+            setItems.add("n." + updateStmt.getColumns().get(i) + " = " + updateStmt.getExpressions().get(i));
         }
-
-        return "MATCH (n:" + tabla + ") WHERE " + condicion + " SET " + cambios;
+        String where = (updateStmt.getWhere() != null) ? " WHERE " + updateStmt.getWhere().toString() : "";
+        return "MATCH (n:" + tabla + ") " + where + " SET " + String.join(", ", setItems);
     }
 
-    private String convertirDelete(String sql) {
-        // DELETE FROM clientes WHERE nombre = 'Juan'
-        String[] partes = sql.split("FROM");
-        String tabla = partes[1].split("WHERE")[0].trim();
-        String condicion = partes.length > 1 ? partes[1].split("WHERE")[1].trim() : "";
-
-        if (tabla.equalsIgnoreCase("CLIENTES")) {
-            tabla = "clientes";
-        }
-
-        return "MATCH (n:" + tabla + ") WHERE " + condicion + " DELETE n";
+    private String convertirDelete(Delete deleteStmt) {
+        String tabla = deleteStmt.getTable().getName().toLowerCase();
+        String where = (deleteStmt.getWhere() != null) ? " WHERE " + deleteStmt.getWhere().toString() : "";
+        return "MATCH (n:" + tabla + ") " + where + " DELETE n";
     }
 }

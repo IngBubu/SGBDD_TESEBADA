@@ -41,5 +41,13 @@
             <artifactId>junit-jupiter-engine</artifactId>
             <version>5.8.1</version>
         </dependency>
+
+        <!-- Dependencia para JSqlParser -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>4.6</version>
+        </dependency>
+
     </dependencies>
 </project>
