@@ -1,3 +1,4 @@
+// AgregarConexionNeo4j.java
 package repository;
 
 import controller.GestorDeDatos;
@@ -11,7 +12,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
 public class AgregarConexionNeo4j extends JFrame {
-    private JTextField campoNombre, campoIP, campoBaseDatos, campoUsuario;
+    private JTextField campoNombre, campoIP, campoBaseDatos, campoUsuario, campoZona;
     private JPasswordField campoContrasena;
     private GestorDeDatos gestorDatos;
     private static final int PUERTO_POR_DEFECTO = 7687; // Puerto estándar de Neo4j
@@ -22,7 +23,7 @@ public class AgregarConexionNeo4j extends JFrame {
 
         setTitle("Agregar Conexión Neo4j");
         setSize(400, 300);
-        setLayout(new GridLayout(6, 2));
+        setLayout(new GridLayout(7, 2)); // Cambiado a 7 filas
 
         add(new JLabel("Nombre de la conexión:"));
         campoNombre = new JTextField();
@@ -44,6 +45,10 @@ public class AgregarConexionNeo4j extends JFrame {
         campoContrasena = new JPasswordField();
         add(campoContrasena);
 
+        add(new JLabel("Zona:")); // Nuevo campo para la zona
+        campoZona = new JTextField();
+        add(campoZona);
+
         JButton botonAgregar = new JButton("Agregar Conexión");
         botonAgregar.addActionListener(new ActionListener() {
             @Override
@@ -62,6 +67,7 @@ public class AgregarConexionNeo4j extends JFrame {
         String baseDatos = campoBaseDatos.getText();
         String usuario = campoUsuario.getText();
         String contrasena = new String(campoContrasena.getPassword());
+        String zona = campoZona.getText(); // Obtener el valor de la zona
 
         // Construye el host con el prefijo y el puerto por defecto
         String hostCompleto = PREFIJO_HOST + ipServidor + ":" + PUERTO_POR_DEFECTO;
@@ -69,7 +75,7 @@ public class AgregarConexionNeo4j extends JFrame {
         try {
             Driver driver = GraphDatabase.driver(hostCompleto, AuthTokens.basic(usuario, contrasena));
             Session session = driver.session(org.neo4j.driver.SessionConfig.forDatabase(baseDatos));
-            gestorDatos.agregarConexionNeo4j(nombre, session);
+            gestorDatos.agregarConexionNeo4j(nombre, session, zona); // Pasar el valor de la zona
             JOptionPane.showMessageDialog(this, "✅ Conexión Neo4j agregada correctamente.");
             dispose();
         } catch (Exception e) {

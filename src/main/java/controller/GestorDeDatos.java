@@ -6,7 +6,6 @@ import java.util.concurrent.*;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
-import org.neo4j.driver.Value;
 
 public class GestorDeDatos {
     private ExecutorService executor;
@@ -21,67 +20,36 @@ public class GestorDeDatos {
         this.conexionesNeo4j = new ConcurrentHashMap<>();
     }
 
-    public void agregarConexionSQL(String nombre, Connection conexion) {
+    public void agregarConexionSQL(String nombre, Connection conexion, String zona) {
         conexionesSQL.put(nombre, conexion);
-        System.out.println("✅ Conexión SQL agregada: " + nombre);
+        System.out.println("✅ Conexión SQL agregada: " + nombre + " en " + zona);
     }
 
-    public void agregarConexionNeo4j(String nombre, Session session) {
+    public void agregarConexionNeo4j(String nombre, Session session, String zona) {
         conexionesNeo4j.put(nombre, session);
-        System.out.println("✅ Conexión Neo4j agregada: " + nombre);
+        System.out.println("✅ Conexión Neo4j agregada: " + nombre + " en " + zona);
     }
 
-    public String[] obtenerNombresColumnas(String consulta) {
-        for (Connection conexion : conexionesSQL.values()) {
-            try (Statement stmt = conexion.createStatement();
-                 ResultSet rs = stmt.executeQuery(consulta)) {
-
-                ResultSetMetaData metaData = rs.getMetaData();
-                int columnas = metaData.getColumnCount();
-                String[] nombresColumnas = new String[columnas];
-
-                for (int i = 0; i < columnas; i++) {
-                    nombresColumnas[i] = metaData.getColumnName(i + 1);
-                }
-                return nombresColumnas;
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }
-        return new String[]{"Error"};
-    }
 
     public void ejecutarConsulta(String sql) {
-        executor.execute(() -> {
-            try {
-                String cypherQuery = sqlParser.convertirSQLaCypher(sql);
+        if (sql == null || sql.trim().isEmpty()) {
+            System.err.println("⚠️ Consulta vacía, no se puede ejecutar.");
+            return;
+        }
 
-                for (Connection conn : conexionesSQL.values()) {
-                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                        conn.setAutoCommit(false);
-                        stmt.executeUpdate();
-                        conn.commit();
-                    } catch (SQLException e) {
-                        conn.rollback();
-                        System.err.println("❌ Error en SQL Server: " + e.getMessage());
-                    }
-                }
+        sql = sql.trim();
+        String sqlUpper = sql.toUpperCase();
 
-                for (Session session : conexionesNeo4j.values()) {
-                    try {
-                        session.run(cypherQuery);
-                    } catch (Exception e) {
-                        System.err.println("❌ Error en Neo4j: " + e.getMessage());
-                    }
-                }
-
-                System.out.println("✅ Transacción confirmada en todas las bases de datos.");
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
+        if (sqlUpper.startsWith("SELECT")) {
+            ejecutarConsultaSelect(sql);
+        } else if (sqlUpper.startsWith("INSERT") || sqlUpper.startsWith("UPDATE") || sqlUpper.startsWith("DELETE")) {
+            ejecutarModificacion(sql);
+        } else {
+            System.err.println("⚠️ Consulta no reconocida.");
+        }
     }
 
+    // 🔹 Cambio de private a public para permitir acceso desde Ui.java
     public Future<List<String[]>> ejecutarConsultaSelect(String sql) {
         return executor.submit(() -> {
             List<String[]> resultados = new ArrayList<>();
@@ -92,7 +60,8 @@ public class GestorDeDatos {
             }
 
             for (Session session : conexionesNeo4j.values()) {
-                resultados.addAll(ejecutarConsultaNeo4j(session, sqlParser.convertirSQLaCypher(sql), nombresColumnas));
+                String cypherQuery = sqlParser.convertirSQLaCypher(sql);
+                resultados.addAll(ejecutarConsultaNeo4j(session, cypherQuery, nombresColumnas));
             }
 
             System.out.println("📊 Registros obtenidos: " + resultados.size());
@@ -100,10 +69,52 @@ public class GestorDeDatos {
         });
     }
 
+    private void ejecutarModificacion(String sql) {
+        boolean ejecutado = false;
+
+        for (Connection conn : conexionesSQL.values()) {
+            if (ejecutarActualizacionSQL(conn, sql)) {
+                ejecutado = true;
+                break;
+            }
+        }
+
+        if (!ejecutado) {
+            for (Session session : conexionesNeo4j.values()) {
+                if (ejecutarActualizacionNeo4j(session, sqlParser.convertirSQLaCypher(sql))) {
+                    break;
+                }
+            }
+        }
+    }
+
+    private boolean ejecutarActualizacionSQL(Connection conn, String sql) {
+        try (Statement stmt = conn.createStatement()) {
+            int filasAfectadas = stmt.executeUpdate(sql);
+            System.out.println("✅ " + filasAfectadas + " filas afectadas en SQL Server.");
+            return true;
+        } catch (SQLException e) {
+            System.err.println("❌ Error en SQL Server: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean ejecutarActualizacionNeo4j(Session session, String cypherQuery) {
+        try {
+            session.run(cypherQuery);
+            System.out.println("✅ Consulta ejecutada en Neo4j.");
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en Neo4j: " + e.getMessage());
+            return false;
+        }
+    }
+
     private List<String[]> ejecutarConsultaSQL(Connection conn, String sql) {
         List<String[]> resultados = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
+
             int columnas = rs.getMetaData().getColumnCount();
             while (rs.next()) {
                 String[] fila = new String[columnas];
@@ -124,43 +135,47 @@ public class GestorDeDatos {
 
         try {
             Result result = session.run(cypherQuery);
-
             while (result.hasNext()) {
                 Record record = result.next();
-                if (record.size() > 0) {
-                    Value node = record.get(0);
+                Map<String, Object> propiedades = record.get("n").asNode().asMap();
+                List<String> fila = new ArrayList<>();
 
-                    if (!node.hasType(org.neo4j.driver.types.TypeSystem.getDefault().NODE())) {
-                        System.err.println("⚠️ El resultado no es un nodo válido.");
-                        continue;
-                    }
-                    Map<String, Object> propiedades = node.asNode().asMap();
-                    List<String> fila = new ArrayList<>();
-                    for (String columna : nombresColumnas) {
-                        String columnaNeo4j = columna.toLowerCase(); // Convertir a minúsculas
-
-                        if (propiedades.containsKey(columnaNeo4j)) {
-                            fila.add(String.valueOf(propiedades.get(columnaNeo4j)));
-                        } else {
-                            System.err.println("⚠️ Propiedad no encontrada en Neo4j: " + columnaNeo4j);
-                            fila.add("null"); // Si no se encuentra, devuelve "null"
-                        }
-                    }
-
-                    resultados.add(fila.toArray(new String[0]));
+                for (String columna : nombresColumnas) {
+                    String columnaNeo4j = columna.toLowerCase();
+                    fila.add(propiedades.getOrDefault(columnaNeo4j, "null").toString());
                 }
+
+                resultados.add(fila.toArray(new String[0]));
             }
         } catch (Exception e) {
             System.err.println("❌ Error ejecutando consulta en Neo4j: " + e.getMessage());
-            e.printStackTrace();
         }
 
         return resultados;
     }
 
+    // 🔹 Cambio de private a public para permitir acceso desde Ui.java
+    public String[] obtenerNombresColumnas(String sql) {
+        if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+            return new String[]{"Error: No es una consulta SELECT"};
+        }
 
-    public void listarConexiones() {
-        System.out.println("🔍 Conexiones SQL Activas: " + conexionesSQL.keySet());
-        System.out.println("🔍 Conexiones Neo4j Activas: " + conexionesNeo4j.keySet());
+        for (Connection conexion : conexionesSQL.values()) {
+            try (Statement stmt = conexion.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+
+                ResultSetMetaData metaData = rs.getMetaData();
+                int columnas = metaData.getColumnCount();
+                String[] nombresColumnas = new String[columnas];
+
+                for (int i = 0; i < columnas; i++) {
+                    nombresColumnas[i] = metaData.getColumnName(i + 1);
+                }
+                return nombresColumnas;
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+        return new String[]{"Error"};
     }
 }

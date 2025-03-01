@@ -8,6 +8,9 @@ import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.schema.Table;
+
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class SQLaCypher {
@@ -52,13 +55,28 @@ public class SQLaCypher {
 
     private String convertirInsert(Insert insertStmt) {
         String tabla = insertStmt.getTable().getName().toLowerCase();
-        String columnas = insertStmt.getColumns().stream()
-                .map(Object::toString)
-                .collect(Collectors.joining(", "));
-        String valores = insertStmt.getItemsList().toString().replace("(", "{").replace(")", "}");
 
-        return "CREATE (n:" + tabla + " " + valores + ")";
+        // Obtener nombres de columnas y valores
+        List<String> columnas = insertStmt.getColumns().stream()
+                .map(Object::toString)
+                .collect(Collectors.toList());
+
+        List<String> valores = Arrays.asList(insertStmt.getItemsList().toString()
+                .replace("(", "").replace(")", "").split(","));
+
+        // Construir el JSON de propiedades en formato Cypher
+        String atributos = "{";
+        for (int i = 0; i < columnas.size(); i++) {
+            atributos += columnas.get(i).trim() + ": " + valores.get(i).trim();
+            if (i < columnas.size() - 1) {
+                atributos += ", ";
+            }
+        }
+        atributos += "}";
+
+        return "CREATE (n:" + tabla + " " + atributos + ")";
     }
+
 
     private String convertirUpdate(Update updateStmt) {
         String tabla = updateStmt.getTable().getName().toLowerCase();

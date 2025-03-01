@@ -1,3 +1,4 @@
+// AgregarConexionSQL.java
 package repository;
 
 import controller.GestorDeDatos;
@@ -9,7 +10,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 
 public class AgregarConexionSQL extends JFrame {
-    private JTextField campoNombre, campoIP, campoBaseDatos, campoUsuario;
+    private JTextField campoNombre, campoIP, campoBaseDatos, campoUsuario, campoZona;
     private JPasswordField campoContrasena;
     private GestorDeDatos gestorDatos;
     private static final int PUERTO_POR_DEFECTO = 1433; // Puerto de SQL Server
@@ -20,7 +21,7 @@ public class AgregarConexionSQL extends JFrame {
 
         setTitle("Agregar Conexión SQL Server");
         setSize(400, 300);
-        setLayout(new GridLayout(6, 2));
+        setLayout(new GridLayout(7, 2)); // Cambiado a 7 filas
 
         add(new JLabel("Nombre de la conexión:"));
         campoNombre = new JTextField();
@@ -42,6 +43,10 @@ public class AgregarConexionSQL extends JFrame {
         campoContrasena = new JPasswordField();
         add(campoContrasena);
 
+        add(new JLabel("Zona:")); // Nuevo campo para la zona
+        campoZona = new JTextField();
+        add(campoZona);
+
         JButton botonAgregar = new JButton("Agregar Conexión");
         botonAgregar.addActionListener(new ActionListener() {
             @Override
@@ -60,13 +65,14 @@ public class AgregarConexionSQL extends JFrame {
         String baseDatos = campoBaseDatos.getText();
         String usuario = campoUsuario.getText();
         String contrasena = new String(campoContrasena.getPassword());
+        String zona = campoZona.getText(); // Obtener el valor de la zona
 
         // Construye la URL con el prefijo y el puerto por defecto
         String urlCompleta = PREFIJO_URL + ipServidor + ":" + PUERTO_POR_DEFECTO + ";databaseName=" + baseDatos;
 
         try {
             Connection conexion = DriverManager.getConnection(urlCompleta, usuario, contrasena);
-            gestorDatos.agregarConexionSQL(nombre, conexion);
+            gestorDatos.agregarConexionSQL(nombre, conexion, zona); // Pasar el valor de la zona
             JOptionPane.showMessageDialog(this, "✅ Conexión SQL agregada correctamente.");
             dispose();
         } catch (Exception e) {

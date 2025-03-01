@@ -23,7 +23,6 @@ public class Ui extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Inicializar GestorDeDatos
         gestorDatos = new GestorDeDatos();
 
         JPanel panelSuperior = new JPanel(new BorderLayout());
@@ -50,7 +49,6 @@ public class Ui extends JFrame {
         etiquetaEstado = new JLabel("Estado: Esperando consulta...");
         add(etiquetaEstado, BorderLayout.WEST);
 
-        // Evento para ejecutar la consulta
         botonEjecutar.addActionListener(e -> ejecutarConsulta());
 
         setVisible(true);
@@ -65,24 +63,18 @@ public class Ui extends JFrame {
 
         etiquetaEstado.setText("Estado: Ejecutando consulta...");
 
-        if (consulta.toUpperCase().startsWith("SELECT")) {
-            Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaSelect(consulta);
+        Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaSelect(consulta);
 
-            new Thread(() -> {
-                try {
-                    List<String[]> resultados = futureResultados.get();
-                    String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
-
-                    SwingUtilities.invokeLater(() -> actualizarTabla(resultados, nombresColumnas));
-                } catch (Exception ex) {
-                    SwingUtilities.invokeLater(() -> etiquetaEstado.setText("Estado: Error en la consulta"));
-                    ex.printStackTrace();
-                }
-            }).start();
-        } else {
-            gestorDatos.ejecutarConsulta(consulta);
-            etiquetaEstado.setText("Estado: Consulta ejecutada");
-        }
+        new Thread(() -> {
+            try {
+                List<String[]> resultados = futureResultados.get();
+                String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
+                SwingUtilities.invokeLater(() -> actualizarTabla(resultados, nombresColumnas));
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> etiquetaEstado.setText("Estado: Error en la consulta"));
+                ex.printStackTrace();
+            }
+        }).start();
     }
 
     private void actualizarTabla(List<String[]> datos, String[] nombresColumnas) {
