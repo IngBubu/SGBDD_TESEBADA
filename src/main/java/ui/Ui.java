@@ -63,13 +63,23 @@ public class Ui extends JFrame {
 
         etiquetaEstado.setText("Estado: Ejecutando consulta...");
 
-        Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaSelect(consulta);
-
         new Thread(() -> {
             try {
-                List<String[]> resultados = futureResultados.get();
-                String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
-                SwingUtilities.invokeLater(() -> actualizarTabla(resultados, nombresColumnas));
+                // Verificar si la consulta es un SELECT para actualizar la tabla
+                if (consulta.toUpperCase().startsWith("SELECT")) {
+                    Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaSelect(consulta);
+                    List<String[]> resultados = futureResultados.get();
+                    String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
+
+                    SwingUtilities.invokeLater(() -> {
+                        actualizarTabla(resultados, nombresColumnas);
+                        etiquetaEstado.setText("Estado: Consulta ejecutada.");
+                    });
+                } else {
+                    // Ejecutar consultas de modificación (INSERT, UPDATE, DELETE)
+                    gestorDatos.ejecutarConsulta(consulta);
+                    SwingUtilities.invokeLater(() -> etiquetaEstado.setText("Estado: Operación realizada."));
+                }
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> etiquetaEstado.setText("Estado: Error en la consulta"));
                 ex.printStackTrace();
@@ -77,16 +87,26 @@ public class Ui extends JFrame {
         }).start();
     }
 
-    private void actualizarTabla(List<String[]> datos, String[] nombresColumnas) {
-        if (datos.isEmpty()) {
-            etiquetaEstado.setText("Estado: No se encontraron resultados");
-            return;
-        }
 
-        DefaultTableModel modelo = new DefaultTableModel(nombresColumnas, 0);
-        for (String[] fila : datos) {
-            modelo.addRow(fila);
-        }
-        tablaResultados.setModel(modelo);
+    private void actualizarTabla(List<String[]> datos, String[] nombresColumnas) {
+        SwingUtilities.invokeLater(() -> {
+            // Si la consulta no devolvió datos, mostrar un mensaje en la UI.
+            if (datos.isEmpty()) {
+                etiquetaEstado.setText("Estado: No se encontraron resultados");
+                DefaultTableModel modeloVacio = new DefaultTableModel(nombresColumnas, 0);
+                tablaResultados.setModel(modeloVacio);
+                return;
+            }
+
+            // Actualizar el modelo de la tabla con los datos obtenidos
+            DefaultTableModel modelo = new DefaultTableModel(nombresColumnas, 0);
+            for (String[] fila : datos) {
+                modelo.addRow(fila);
+            }
+
+            tablaResultados.setModel(modelo);
+            etiquetaEstado.setText("Estado: Datos actualizados.");
+        });
     }
+
 }
