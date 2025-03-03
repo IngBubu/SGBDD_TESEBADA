@@ -80,13 +80,28 @@ public class SQLaCypher {
 
     private String convertirUpdate(Update updateStmt) {
         String tabla = updateStmt.getTable().getName().toLowerCase();
+
+        // Construir la cláusula SET en Cypher
         String setClause = updateStmt.getColumns().stream()
                 .map(col -> "n." + col + " = " + updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)))
                 .collect(Collectors.joining(", "));
-        String where = (updateStmt.getWhere() != null) ? " WHERE " + updateStmt.getWhere().toString() : "";
 
-        return "MATCH (n:" + tabla + ") " + where + " SET " + setClause;
+        // Construir la cláusula WHERE correctamente
+        String where = "";
+        if (updateStmt.getWhere() != null) {
+            where = updateStmt.getWhere().toString()
+                    .replace("=", " = ")  // Asegurar espacios correctos
+                    .replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");  // Prefija los campos con 'n.'
+
+            // Asegurar que IdCliente es tratado como un número en Cypher
+            where = where.replace("n.IdCliente =", "n.IdCliente =");
+        }
+
+        return "MATCH (n:" + tabla + ") WHERE " + where + " SET " + setClause;
     }
+
+
+
 
     private String convertirDelete(Delete deleteStmt) {
         String tabla = deleteStmt.getTable().getName().toLowerCase();
