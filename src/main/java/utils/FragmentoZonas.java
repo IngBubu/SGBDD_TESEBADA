@@ -7,44 +7,44 @@ public class FragmentoZonas {
     private static final Map<String, String> mapaEstadosZona = new HashMap<>();
 
     static {
-        // 🔹 Mapeo de estados a zonas según la imagen
-        mapaEstadosZona.put("Durango", "ZonaNorte");
-        mapaEstadosZona.put("CDMX", "ZonaNorte");
-        mapaEstadosZona.put("Chihuahua", "ZonaNorte");
-        mapaEstadosZona.put("Estado de Mexico", "ZonaNorte");
-        mapaEstadosZona.put("Baja California", "ZonaNorte");
-        mapaEstadosZona.put("Queretaro", "ZonaNorte");
-        mapaEstadosZona.put("Coahuila", "ZonaNorte");
-        mapaEstadosZona.put("Tamaulipas", "ZonaNorte");
-        mapaEstadosZona.put("Sonora", "ZonaNorte");
-        mapaEstadosZona.put("Morelos", "ZonaNorte");
+        // 🔹 Mapeo de estados a zonas (ahora en minúsculas)
+        mapaEstadosZona.put("durango", "ZonaNorte");
+        mapaEstadosZona.put("cdmx", "ZonaNorte");
+        mapaEstadosZona.put("chihuahua", "ZonaNorte");
+        mapaEstadosZona.put("estado de mexico", "ZonaNorte");
+        mapaEstadosZona.put("baja california", "ZonaNorte");
+        mapaEstadosZona.put("queretaro", "ZonaNorte");
+        mapaEstadosZona.put("coahuila", "ZonaNorte");
+        mapaEstadosZona.put("tamaulipas", "ZonaNorte");
+        mapaEstadosZona.put("sonora", "ZonaNorte");
+        mapaEstadosZona.put("morelos", "ZonaNorte");
 
-        mapaEstadosZona.put("Zacatecas", "ZonaCentro");
-        mapaEstadosZona.put("Hidalgo", "ZonaCentro");
-        mapaEstadosZona.put("Queretaro", "ZonaCentro");
-        mapaEstadosZona.put("Puebla", "ZonaCentro");
-        mapaEstadosZona.put("Nuevo Leon", "ZonaCentro");
-        mapaEstadosZona.put("CDMX", "ZonaCentro");
-        mapaEstadosZona.put("Morelos", "ZonaCentro");
-        mapaEstadosZona.put("Yucatan", "ZonaCentro");
-        mapaEstadosZona.put("San Luis Potosi", "ZonaCentro");
-        mapaEstadosZona.put("Michoacan", "ZonaCentro");
+        mapaEstadosZona.put("zacatecas", "ZonaCentro");
+        mapaEstadosZona.put("hidalgo", "ZonaCentro");
+        mapaEstadosZona.put("queretaro", "ZonaCentro");
+        mapaEstadosZona.put("puebla", "ZonaCentro");
+        mapaEstadosZona.put("nuevo leon", "ZonaCentro");
+        mapaEstadosZona.put("cdmx", "ZonaCentro");
+        mapaEstadosZona.put("morelos", "ZonaCentro");
+        mapaEstadosZona.put("yucatan", "ZonaCentro");
+        mapaEstadosZona.put("san luis potosi", "ZonaCentro");
+        mapaEstadosZona.put("michoacan", "ZonaCentro");
 
-        mapaEstadosZona.put("Oaxaca", "ZonaSur");
-        mapaEstadosZona.put("Veracruz", "ZonaSur");
-        mapaEstadosZona.put("Guerrero", "ZonaSur");
-        mapaEstadosZona.put("Zacatecas", "ZonaSur");
-        mapaEstadosZona.put("Quintana Roo", "ZonaSur");
-        mapaEstadosZona.put("Queretaro", "ZonaSur");
-        mapaEstadosZona.put("Guanajuato", "ZonaSur");
-        mapaEstadosZona.put("Estado de Mexico", "ZonaSur");
-        mapaEstadosZona.put("Campeche", "ZonaSur");
-        mapaEstadosZona.put("Hidalgo", "ZonaSur");
-        mapaEstadosZona.put("Tabasco", "ZonaSur");
-        mapaEstadosZona.put("Chiapas", "ZonaSur");
+        mapaEstadosZona.put("oaxaca", "ZonaSur");
+        mapaEstadosZona.put("veracruz", "ZonaSur");
+        mapaEstadosZona.put("guerrero", "ZonaSur");
+        mapaEstadosZona.put("zacatecas", "ZonaSur");
+        mapaEstadosZona.put("quintana roo", "ZonaSur");
+        mapaEstadosZona.put("queretaro", "ZonaSur");
+        mapaEstadosZona.put("guanajuato", "ZonaSur");
+        mapaEstadosZona.put("estado de mexico", "ZonaSur");
+        mapaEstadosZona.put("campeche", "ZonaSur");
+        mapaEstadosZona.put("hidalgo", "ZonaSur");
+        mapaEstadosZona.put("tabasco", "ZonaSur");
+        mapaEstadosZona.put("chiapas", "ZonaSur");
     }
 
     public static String obtenerZonaPorEstado(String estado) {
-        return mapaEstadosZona.getOrDefault(estado, "ZonaDesconocida");
+        return mapaEstadosZona.getOrDefault(estado.toLowerCase(), "ZonaDesconocida");
     }
 }
