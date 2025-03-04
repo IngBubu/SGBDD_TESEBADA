@@ -3,6 +3,8 @@ package controller.queries;
 import controller.SQLaCypher;
 import org.neo4j.driver.*;
 import org.neo4j.driver.Record;
+import org.neo4j.driver.types.Node;
+
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -115,26 +117,22 @@ public class ConsultaSelect {
 
             while (result.hasNext()) {
                 Record record = result.next();
-                Map<String, Object> propiedades = record.get("n").asNode().asMap();
+                Node nodo = record.get("n").asNode();  // Obtener el nodo
 
-                System.out.println("📌 Datos obtenidos de Neo4j: " + propiedades); // Ver qué datos devuelve
+                // Extraer propiedades validando tipos de datos
+                String idCliente = nodo.containsKey("IdCliente") ? String.valueOf(nodo.get("IdCliente").asInt()) : "null";
+                String nombre = nodo.containsKey("Nombre") ? nodo.get("Nombre").asString() : "null";
+                String estado = nodo.containsKey("Estado") ? nodo.get("Estado").asString() : "null";
+                String credito = nodo.containsKey("Credito") ? String.format("%.2f", nodo.get("Credito").asDouble()) : "null";
+                String deuda = nodo.containsKey("Deuda") ? String.format("%.2f", nodo.get("Deuda").asDouble()) : "null";
 
-                List<String> fila = new ArrayList<>();
+                System.out.println("📌 Registro obtenido de Neo4j: " + idCliente + ", " + nombre + ", " + estado + ", " + credito + ", " + deuda);
 
-                // Reorganizar los datos de Neo4j en el mismo orden que SQL Server
-                for (String columna : nombresColumnas) {
-                    String columnaNeo4j = columna.toLowerCase(); // Asegurar coincidencia de nombres
-                    if (propiedades.containsKey(columnaNeo4j)) {
-                        Object valor = propiedades.get(columnaNeo4j);
-                        fila.add(valor != null ? valor.toString() : "null");
-                    } else {
-                        System.err.println("⚠️ Propiedad no encontrada en Neo4j: " + columnaNeo4j);
-                        fila.add("null"); // Si no se encuentra la propiedad, asignamos "null"
-                    }
-                }
-
-                resultados.add(fila.toArray(new String[0]));
+                resultados.add(new String[]{idCliente, nombre, estado, credito, deuda});
             }
+
+
+
         } catch (Exception e) {
             System.err.println("❌ Error ejecutando consulta en Neo4j: " + e.getMessage());
             e.printStackTrace();
