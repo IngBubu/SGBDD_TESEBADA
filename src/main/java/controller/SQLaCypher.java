@@ -94,7 +94,7 @@ public class SQLaCypher {
                     .replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");  // Prefija los campos con 'n.'
 
             // Asegurar que IdCliente es tratado como un número en Cypher
-            where = where.replace("n.IdCliente =", "n.IdCliente =");
+            where = where.replace("n.idcliente =", "n.idlcliente =");
         }
 
         return "MATCH (n:" + tabla + ") WHERE " + where + " SET " + setClause;

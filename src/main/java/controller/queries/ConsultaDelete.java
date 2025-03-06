@@ -10,9 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ConsultaDelete {
     private final Map<String, Connection> conexionesSQL = new ConcurrentHashMap<>();
     private final Map<String, Session> conexionesNeo4j = new ConcurrentHashMap<>();
+    private final SQLaCypher sqlParser = new SQLaCypher(); // Conversión de SQL a Cypher
     private final Map<String, String> zonasSQL = new HashMap<>();
     private final Map<String, String> zonasNeo4j = new HashMap<>();
-    private final SQLaCypher sqlParser = new SQLaCypher(); // Conversión de SQL a Cypher
 
     public void agregarConexionSQL(String nombre, Connection conexion, String zona) {
         conexionesSQL.put(nombre, conexion);
@@ -30,65 +30,83 @@ public class ConsultaDelete {
             return false;
         }
 
+        System.out.println("🔹 Consulta original en SQL: " + sql); // 🔹 Imprimir SQL original
+
         boolean eliminado = false;
 
-        // 🔍 Log: Mostrar consulta original en SQL
-        System.out.println("🔍 Consulta SQL recibida: " + sql);
+        // **🔹 Ejecutar en SQL Server**
+        for (Connection conn : conexionesSQL.values()) {
+            if (ejecutarDeleteSQL(conn, sql)) {
+                eliminado = true;
+            }
+        }
 
-        // Convertir SQL a Cypher
+        // **🔹 Convertir y ejecutar en Neo4j**
         String cypherQuery = sqlParser.convertirSQLaCypher(sql);
+        System.out.println("🔹 Consulta transformada a Cypher: " + cypherQuery); // 🔹 Imprimir Cypher generado
 
-        // 🔍 Log: Mostrar consulta Cypher generada
-        System.out.println("🔍 Consulta Cypher generada: " + cypherQuery);
-
-        // 🔹 Ejecutar DELETE en SQL Server
-        for (Map.Entry<String, Connection> entry : conexionesSQL.entrySet()) {
-            System.out.println("🛠 Ejecutando DELETE en SQL Server: " + entry.getKey());
-            if (ejecutarActualizacionSQL(entry.getValue(), sql)) {
-                System.out.println("✅ DELETE ejecutado en SQL Server correctamente en: " + entry.getKey());
-                eliminado = true;
-            } else {
-                System.err.println("❌ Error ejecutando DELETE en SQL Server: " + entry.getKey());
-            }
+        if (cypherQuery == null || cypherQuery.trim().isEmpty()) {
+            System.err.println("❌ ERROR: La conversión a Cypher falló.");
+            return false;
         }
 
-        // 🔹 Ejecutar DELETE en Neo4j
-        for (Map.Entry<String, Session> entry : conexionesNeo4j.entrySet()) {
-            System.out.println("🛠 Ejecutando DELETE en Neo4j: " + entry.getKey());
-            if (ejecutarActualizacionNeo4j(entry.getValue(), cypherQuery)) {
-                System.out.println("✅ DELETE ejecutado en Neo4j correctamente en: " + entry.getKey());
+        for (Session session : conexionesNeo4j.values()) {
+            if (ejecutarDeleteNeo4j(session, cypherQuery)) {
                 eliminado = true;
-            } else {
-                System.err.println("❌ Error ejecutando DELETE en Neo4j: " + entry.getKey());
             }
-        }
-
-        if (!eliminado) {
-            System.err.println("⚠️ No se pudo eliminar en ninguna base de datos.");
         }
 
         return eliminado;
     }
 
-    private boolean ejecutarActualizacionSQL(Connection conn, String sql) {
-        try (Statement stmt = conn.createStatement()) {
-            int filasAfectadas = stmt.executeUpdate(sql);
-            System.out.println("📝 Filas eliminadas en SQL Server: " + filasAfectadas);
-            return filasAfectadas > 0;
+    private boolean ejecutarDeleteSQL(Connection conn, String sql) {
+        try {
+            conn.setAutoCommit(false);
+            try (Statement stmt = conn.createStatement()) {
+                int filasAfectadas = stmt.executeUpdate(sql);
+                if (filasAfectadas > 0) {
+                    conn.commit();
+                    System.out.println("✅ DELETE ejecutado en SQL Server. Filas eliminadas: " + filasAfectadas);
+                    return true;
+                } else {
+                    System.out.println("⚠️ DELETE en SQL Server no afectó ninguna fila.");
+                    conn.rollback();
+                    return false;
+                }
+            }
         } catch (SQLException e) {
-            System.err.println("❌ Error en SQL Server: " + e.getMessage());
+            System.err.println("❌ Error en SQL Server DELETE: " + e.getMessage());
+            try {
+                conn.rollback();
+            } catch (SQLException rollbackEx) {
+                System.err.println("❌ Error en rollback SQL Server: " + rollbackEx.getMessage());
+            }
             return false;
+        } finally {
+            try {
+                conn.setAutoCommit(true);
+            } catch (SQLException e) {
+                System.err.println("⚠️ No se pudo restaurar AutoCommit en SQL Server.");
+            }
         }
     }
 
-    private boolean ejecutarActualizacionNeo4j(Session session, String cypherQuery) {
-        try {
-            Result result = session.run(cypherQuery);
-            int registrosEliminados = result.consume().counters().nodesDeleted();
-            System.out.println("📝 Registros eliminados en Neo4j: " + registrosEliminados);
-            return registrosEliminados > 0;
+    private boolean ejecutarDeleteNeo4j(Session session, String cypherQuery) {
+        if (session == null) return false;
+        try (Transaction tx = session.beginTransaction()) {
+            Result result = tx.run(cypherQuery);
+            tx.commit();
+
+            int nodosEliminados = result.consume().counters().nodesDeleted();
+            if (nodosEliminados > 0) {
+                System.out.println("✅ DELETE ejecutado en Neo4j. Nodos eliminados: " + nodosEliminados);
+                return true;
+            } else {
+                System.out.println("⚠️ DELETE en Neo4j no eliminó ningún nodo.");
+                return false;
+            }
         } catch (Exception e) {
-            System.err.println("❌ Error en Neo4j: " + e.getMessage());
+            System.err.println("❌ Error en Neo4j DELETE: " + e.getMessage());
             return false;
         }
     }

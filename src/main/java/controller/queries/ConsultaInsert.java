@@ -24,10 +24,22 @@ public class ConsultaInsert {
         zonasNeo4j.put(nombre, zona);
     }
 
+    public Map<String, Connection> getConexionesSQL() {
+        return conexionesSQL;
+    }
+
+    public Map<String, Session> getConexionesNeo4j() {
+        return conexionesNeo4j;
+    }
+
     public void ejecutarInsert(String sql) {
         String estado = extraerEstadoDesdeInsert(sql);
-        String zonaDestino = FragmentoZonas.obtenerZonaPorEstado(estado);
+        if (estado == null) {
+            System.err.println("❌ No se pudo extraer el estado desde la consulta INSERT.");
+            return;
+        }
 
+        String zonaDestino = FragmentoZonas.obtenerZonaPorEstado(estado);
         System.out.println("📌 Estado detectado: " + estado);
         System.out.println("📌 Zona asignada: " + zonaDestino);
 
@@ -37,35 +49,82 @@ public class ConsultaInsert {
         }
 
         boolean insertado = false;
+        List<Connection> participantesSQL = new ArrayList<>();
+        List<Session> participantesNeo4j = new ArrayList<>();
 
-        // Insertar en la base de datos SQL correspondiente a la zona
         for (Map.Entry<String, String> entry : zonasSQL.entrySet()) {
             if (entry.getValue().equals(zonaDestino)) {
-                if (ejecutarActualizacionSQL(conexionesSQL.get(entry.getKey()), sql)) {
-                    System.out.println("✅ Insert realizado en SQL Server (Zona: " + zonaDestino + ")");
-                    insertado = true;
-                    break;
-                }
+                participantesSQL.add(conexionesSQL.get(entry.getKey()));
             }
         }
 
-        // Insertar en Neo4j si el estado pertenece a ZonaSur
         for (Map.Entry<String, String> entry : zonasNeo4j.entrySet()) {
             if (entry.getValue().equals(zonaDestino)) {
-                String cypherQuery = new SQLaCypher().convertirSQLaCypher(sql);
-                if (ejecutarActualizacionNeo4j(conexionesNeo4j.get(entry.getKey()), cypherQuery)) {
-                    System.out.println("✅ Insert realizado en Neo4j (Zona: " + zonaDestino + ")");
-                    insertado = true;
-                    break;
-                }
+                participantesNeo4j.add(conexionesNeo4j.get(entry.getKey()));
             }
         }
 
-        if (!insertado) {
-            System.err.println("⚠️ No se pudo insertar en ninguna base de datos para el estado: " + estado);
+        if (!fasePreparacion(participantesSQL)) {
+            System.err.println("❌ ABORTANDO: No todos los participantes están listos.");
+            return;
+        }
+
+        for (Connection conn : participantesSQL) {
+            if (ejecutarActualizacionSQL(conn, sql)) {
+                insertado = true;
+            }
+        }
+
+        for (Session session : participantesNeo4j) {
+            String cypherQuery = new SQLaCypher().convertirSQLaCypher(sql);
+            if (ejecutarActualizacionNeo4j(session, cypherQuery)) {
+                insertado = true;
+            }
+        }
+
+        if (insertado) {
+            commitTransaccion(participantesSQL);
+        } else {
+            rollbackTransaccion(participantesSQL);
         }
     }
 
+    private boolean fasePreparacion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.setAutoCommit(false);
+            }
+            System.out.println("✅ Fase de preparación completada.");
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en fase de preparación: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void commitTransaccion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.commit();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("✅ COMMIT completado en SQL Server.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en commit SQL Server: " + e.getMessage());
+        }
+    }
+
+    private void rollbackTransaccion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.rollback();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("🔄 ROLLBACK realizado en SQL Server.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en rollback SQL Server: " + e.getMessage());
+        }
+    }
 
     private boolean ejecutarActualizacionSQL(Connection conn, String sql) {
         if (conn == null) return false;
@@ -80,8 +139,10 @@ public class ConsultaInsert {
 
     private boolean ejecutarActualizacionNeo4j(Session session, String cypherQuery) {
         if (session == null) return false;
-        try {
-            session.run(cypherQuery);
+        try (Transaction tx = session.beginTransaction()) { // 🔹 Nueva transacción para cada consulta
+            tx.run(cypherQuery);
+            tx.commit();
+            System.out.println("✅ INSERT ejecutado en Neo4j con nueva transacción.");
             return true;
         } catch (Exception e) {
             System.err.println("❌ Error en Neo4j: " + e.getMessage());
@@ -90,23 +151,20 @@ public class ConsultaInsert {
     }
 
     private String extraerEstadoDesdeInsert(String sql) {
-        sql = sql.toLowerCase(); // Convertimos a minúsculas para evitar problemas
+        sql = sql.toLowerCase();
         int indexValues = sql.indexOf("values");
         if (indexValues == -1) return null;
 
         String[] partes = sql.substring(indexValues).split(",");
         if (partes.length < 3) return null;
 
-        // Extraemos el estado del INSERT
         String estado = partes[2].replace("'", "").trim().toLowerCase();
         System.out.println("📌 Estado extraído desde INSERT: " + estado);
 
         return estado;
     }
 
-
     private String convertirInsertACypher(String sql) {
-        // Implementar conversión de INSERT SQL a Cypher si es necesario
         return sql.replace("INSERT INTO", "CREATE (n:")
                 .replace("VALUES", ") SET n =")
                 .replace(";", "");

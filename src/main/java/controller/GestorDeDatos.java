@@ -5,27 +5,28 @@ import controller.queries.ConsultaInsert;
 import controller.queries.ConsultaUpdate;
 import controller.queries.ConsultaDelete;
 import org.neo4j.driver.Session;
+import org.neo4j.driver.Transaction;
+
 import java.sql.Connection;
-import java.util.List;
-import java.util.Map;
+import java.sql.SQLException;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class GestorDeDatos {
-    private ExecutorService executor;
-    private ConsultaSelect consultaSelect;
-    private ConsultaInsert consultaInsert;
-    private ConsultaUpdate consultaUpdate;
-    private ConsultaDelete consultaDelete;
-
-
+    private final ExecutorService executor;
+    private final ConsultaSelect consultaSelect;
+    private final ConsultaInsert consultaInsert;
+    private final ConsultaUpdate consultaUpdate;
+    private final ConsultaDelete consultaDelete;
 
     public GestorDeDatos() {
         this.executor = Executors.newFixedThreadPool(5);
-        consultaSelect = new ConsultaSelect();
-        consultaInsert = new ConsultaInsert();
-        consultaUpdate = new ConsultaUpdate();
-        consultaDelete = new ConsultaDelete();
+        this.consultaSelect = new ConsultaSelect();
+        this.consultaInsert = new ConsultaInsert();
+        this.consultaUpdate = new ConsultaUpdate();
+        this.consultaDelete = new ConsultaDelete();
     }
+
     public String[] obtenerNombresColumnas(String consulta) {
         return consultaSelect.obtenerNombresColumnas(consulta);
     }
@@ -56,11 +57,11 @@ public class GestorDeDatos {
         if (sqlUpper.startsWith("SELECT")) {
             ejecutarConsultaSelect(sql);
         } else if (sqlUpper.startsWith("INSERT")) {
-            consultaInsert.ejecutarInsert(sql);
+            ejecutarTransaccion2PC(sql, "INSERT");
         } else if (sqlUpper.startsWith("UPDATE")) {
-            consultaUpdate.ejecutarUpdate(sql);
+            ejecutarTransaccion2PC(sql, "UPDATE");
         } else if (sqlUpper.startsWith("DELETE")) {
-            consultaDelete.ejecutarDelete(sql);
+            ejecutarTransaccion2PC(sql, "DELETE");
         } else {
             System.err.println("⚠️ Consulta no reconocida.");
         }
@@ -68,5 +69,96 @@ public class GestorDeDatos {
 
     public Future<List<String[]>> ejecutarConsultaSelect(String sql) {
         return executor.submit(() -> consultaSelect.ejecutarConsultaSelect(sql));
+    }
+
+    public boolean ejecutarTransaccion2PC(String sql, String tipo) {
+        List<Connection> participantesSQL = new ArrayList<>(consultaInsert.getConexionesSQL().values());
+        List<Session> participantesNeo4j = new ArrayList<>(consultaInsert.getConexionesNeo4j().values());
+
+        try {
+            // **🔹 Fase 1: Preparación**
+            if (!fasePreparacion(participantesSQL)) {
+                System.err.println("❌ ABORTANDO: No todos los participantes están listos.");
+                return false;
+            }
+
+            // **🔹 Fase 2: Ejecución**
+            switch (tipo.toUpperCase()) {
+                case "INSERT":
+                    consultaInsert.ejecutarInsert(sql);
+                    break;
+                case "UPDATE":
+                    consultaUpdate.ejecutarUpdate(sql);
+                    break;
+                case "DELETE":
+                    consultaDelete.ejecutarDelete(sql);
+                    break;
+                default:
+                    System.err.println("⚠️ Tipo de operación no soportado.");
+                    return false;
+            }
+
+            // **🔹 Fase 3: Commit**
+            commitTransaccion(participantesSQL);
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en la transacción 2PC: " + e.getMessage());
+            rollbackTransaccion(participantesSQL);
+            return false;
+        }
+    }
+
+    /**
+     * **🔹 Fase de Preparación**
+     * - Solo aplica para SQL Server, ya que Neo4j maneja transacciones individuales.
+     */
+    private boolean fasePreparacion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                if (conn == null) {
+                    System.err.println("❌ Error: Una conexión a SQL Server es NULL.");
+                    return false;
+                }
+                conn.setAutoCommit(false);
+            }
+            System.out.println("✅ Fase de preparación completada.");
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en fase de preparación: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * **🔹 Commit en todas las bases de datos**
+     * - SQL Server: Realiza `commit()`.
+     * - Neo4j: No es necesario, ya que cada transacción se maneja independientemente en `ConsultaInsert`.
+     */
+    private void commitTransaccion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.commit();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("✅ COMMIT en todas las bases de datos completado.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en commit SQL Server: " + e.getMessage());
+        }
+    }
+
+    /**
+     * **🔹 Rollback en caso de fallo**
+     * - Solo afecta a SQL Server, ya que en Neo4j las consultas se manejan de forma atómica.
+     */
+    private void rollbackTransaccion(List<Connection> sqlConns) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.rollback();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("🔄 ROLLBACK realizado en SQL Server.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en rollback SQL Server: " + e.getMessage());
+        }
     }
 }

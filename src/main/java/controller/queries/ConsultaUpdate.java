@@ -24,40 +24,78 @@ public class ConsultaUpdate {
     }
 
     public void ejecutarUpdate(String sql) {
-        boolean ejecutadoEnSQL = false;
-        boolean ejecutadoEnNeo4j = false;
+        boolean actualizado = false;
+        List<Connection> participantesSQL = new ArrayList<>(conexionesSQL.values());
+        List<Session> participantesNeo4j = new ArrayList<>(conexionesNeo4j.values());
 
-        // 🔹 Intentar en SQL Server
-        for (Connection conn : conexionesSQL.values()) {
+        if (!fasePreparacion(participantesSQL, participantesNeo4j)) {
+            System.err.println("❌ ABORTANDO: No todos los participantes están listos.");
+            return;
+        }
+
+        // **🔹 Ejecutar UPDATE en SQL Server**
+        for (Connection conn : participantesSQL) {
             if (ejecutarActualizacionSQL(conn, sql)) {
-                ejecutadoEnSQL = true;
-                System.out.println("✅ Update realizado en SQL Server.");
-                break; // Si se ejecutó en SQL Server, detener la búsqueda.
+                actualizado = true;
             }
         }
 
-        // 🔹 Convertir SQL a Cypher si la consulta no se ejecutó en SQL Server
+        // **🔹 Ejecutar UPDATE en Neo4j**
         String cypherQuery = sqlParser.convertirSQLaCypher(sql);
-
-        // 🔹 Intentar en Neo4j
-        for (Session session : conexionesNeo4j.values()) {
+        for (Session session : participantesNeo4j) {
             if (ejecutarActualizacionNeo4j(session, cypherQuery)) {
-                ejecutadoEnNeo4j = true;
-                System.out.println("✅ Update realizado en Neo4j.");
-                break; // Si se ejecutó en Neo4j, detener la búsqueda.
+                actualizado = true;
             }
         }
 
-        // 🔹 Si no se pudo actualizar en ninguna base de datos, mostrar advertencia
-        if (!ejecutadoEnSQL && !ejecutadoEnNeo4j) {
-            System.err.println("⚠️ No se pudo actualizar en ninguna base de datos.");
+        // **🔹 Commit o Rollback según el resultado**
+        if (actualizado) {
+            commitTransaccion(participantesSQL, participantesNeo4j);
+        } else {
+            rollbackTransaccion(participantesSQL, participantesNeo4j);
+        }
+    }
+
+    private boolean fasePreparacion(List<Connection> sqlConns, List<Session> neo4jSessions) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.setAutoCommit(false);
+            }
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en fase de preparación: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void commitTransaccion(List<Connection> sqlConns, List<Session> neo4jSessions) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.commit();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("✅ COMMIT en todas las bases de datos completado.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en commit SQL Server: " + e.getMessage());
+        }
+    }
+
+    private void rollbackTransaccion(List<Connection> sqlConns, List<Session> neo4jSessions) {
+        try {
+            for (Connection conn : sqlConns) {
+                conn.rollback();
+                conn.setAutoCommit(true);
+            }
+            System.out.println("🔄 ROLLBACK realizado en todas las bases de datos.");
+        } catch (SQLException e) {
+            System.err.println("❌ Error en rollback SQL Server: " + e.getMessage());
         }
     }
 
     private boolean ejecutarActualizacionSQL(Connection conn, String sql) {
         try (Statement stmt = conn.createStatement()) {
             int filasAfectadas = stmt.executeUpdate(sql);
-            return filasAfectadas > 0; // Solo devolver true si se afectaron filas
+            return filasAfectadas > 0;
         } catch (SQLException e) {
             System.err.println("❌ Error en SQL Server: " + e.getMessage());
             return false;
@@ -65,9 +103,10 @@ public class ConsultaUpdate {
     }
 
     private boolean ejecutarActualizacionNeo4j(Session session, String cypherQuery) {
-        try {
-            System.out.println("🔍 Consulta Cypher generada para UPDATE: " + cypherQuery);
-            session.run(cypherQuery);
+        try (Transaction tx = session.beginTransaction()) { // **🔹 Cada consulta usa su propia transacción**
+            tx.run(cypherQuery);
+            tx.commit();
+            System.out.println("✅ UPDATE en Neo4j ejecutado correctamente.");
             return true;
         } catch (Exception e) {
             System.err.println("❌ Error en Neo4j: " + e.getMessage());

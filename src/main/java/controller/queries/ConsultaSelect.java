@@ -120,11 +120,11 @@ public class ConsultaSelect {
                 Node nodo = record.get("n").asNode();  // Obtener el nodo
 
                 // Extraer propiedades validando tipos de datos
-                String idCliente = nodo.containsKey("IdCliente") ? String.valueOf(nodo.get("IdCliente").asInt()) : "null";
-                String nombre = nodo.containsKey("Nombre") ? nodo.get("Nombre").asString() : "null";
-                String estado = nodo.containsKey("Estado") ? nodo.get("Estado").asString() : "null";
-                String credito = nodo.containsKey("Credito") ? String.format("%.2f", nodo.get("Credito").asDouble()) : "null";
-                String deuda = nodo.containsKey("Deuda") ? String.format("%.2f", nodo.get("Deuda").asDouble()) : "null";
+                String idCliente = nodo.containsKey("idcliente") ? String.valueOf(nodo.get("idcliente").asInt()) : "null";
+                String nombre = nodo.containsKey("nombre") ? nodo.get("nombre").asString() : "null";
+                String estado = nodo.containsKey("estado") ? nodo.get("estado").asString() : "null";
+                String credito = nodo.containsKey("credito") ? String.format("%.2f", nodo.get("credito").asDouble()) : "null";
+                String deuda = nodo.containsKey("deuda") ? String.format("%.2f", nodo.get("deuda").asDouble()) : "null";
 
                 System.out.println("📌 Registro obtenido de Neo4j: " + idCliente + ", " + nombre + ", " + estado + ", " + credito + ", " + deuda);
 
