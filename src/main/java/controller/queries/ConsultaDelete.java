@@ -1,11 +1,10 @@
 package controller.queries;
 
 import controller.SQLaCypher;
-import org.neo4j.driver.*;
-
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import org.neo4j.driver.*;
 
 public class ConsultaDelete {
     private final Map<String, Connection> conexionesSQL = new ConcurrentHashMap<>();
@@ -24,34 +23,43 @@ public class ConsultaDelete {
         zonasNeo4j.put(nombre, zona);
     }
 
-    public boolean ejecutarDelete(String sql) {
-        if (!sql.trim().toUpperCase().startsWith("DELETE")) {
-            System.err.println("⚠️ La consulta no es un DELETE válido.");
-            return false;
-        }
+    /**
+     * 🔹 Ejecuta un DELETE distribuido en todos los fragmentos (ZonaNorte, ZonaCentro, ZonaSur).
+     */
+    public boolean ejecutarDeleteDistribuido(String sql, String tablaLogica, Map<String, Map<String, String>> mapeoTablas) {
+        System.out.println("🔹 DELETE lógico en tabla: " + tablaLogica);
 
-        System.out.println("🔹 Consulta original en SQL: " + sql); // 🔹 Imprimir SQL original
+        String sqlZonaNorte = sql.replace(tablaLogica, obtenerNombreFisico(tablaLogica, "ZonaNorte", mapeoTablas));
+        String sqlZonaCentro = sql.replace(tablaLogica, obtenerNombreFisico(tablaLogica, "ZonaCentro", mapeoTablas));
+        String sqlZonaSur = sql.replace(tablaLogica, obtenerNombreFisico(tablaLogica, "ZonaSur", mapeoTablas));
 
         boolean eliminado = false;
 
         // **🔹 Ejecutar en SQL Server**
-        for (Connection conn : conexionesSQL.values()) {
-            if (ejecutarDeleteSQL(conn, sql)) {
+        for (Map.Entry<String, Connection> entry : conexionesSQL.entrySet()) {
+            String zona = zonasSQL.get(entry.getKey());
+            String sqlModificado = switch (zona) {
+                case "ZonaNorte" -> sqlZonaNorte;
+                case "ZonaCentro" -> sqlZonaCentro;
+                case "ZonaSur" -> sqlZonaSur;
+                default -> null;
+            };
+
+            if (sqlModificado != null && ejecutarDeleteSQL(entry.getValue(), sqlModificado)) {
                 eliminado = true;
             }
         }
 
         // **🔹 Convertir y ejecutar en Neo4j**
-        String cypherQuery = sqlParser.convertirSQLaCypher(sql);
-        System.out.println("🔹 Consulta transformada a Cypher: " + cypherQuery); // 🔹 Imprimir Cypher generado
-
-        if (cypherQuery == null || cypherQuery.trim().isEmpty()) {
+        String cypherZonaSur = sqlParser.convertirSQLaCypher(sqlZonaSur);
+        if (cypherZonaSur == null || cypherZonaSur.trim().isEmpty()) {
             System.err.println("❌ ERROR: La conversión a Cypher falló.");
-            return false;
+            return eliminado;
         }
 
-        for (Session session : conexionesNeo4j.values()) {
-            if (ejecutarDeleteNeo4j(session, cypherQuery)) {
+        for (Map.Entry<String, Session> entry : conexionesNeo4j.entrySet()) {
+            String zona = zonasNeo4j.get(entry.getKey());
+            if ("ZonaSur".equals(zona) && ejecutarDeleteNeo4j(entry.getValue(), cypherZonaSur)) {
                 eliminado = true;
             }
         }
@@ -59,6 +67,16 @@ public class ConsultaDelete {
         return eliminado;
     }
 
+    /**
+     * 🔹 Obtiene el nombre físico de la tabla en una zona específica.
+     */
+    private String obtenerNombreFisico(String tablaLogica, String zona, Map<String, Map<String, String>> mapeoTablas) {
+        return mapeoTablas.getOrDefault(tablaLogica.toLowerCase(), new HashMap<>()).getOrDefault(zona, tablaLogica);
+    }
+
+    /**
+     * 🔹 Ejecuta un DELETE en SQL Server con control de transacción.
+     */
     private boolean ejecutarDeleteSQL(Connection conn, String sql) {
         try {
             conn.setAutoCommit(false);
@@ -91,6 +109,9 @@ public class ConsultaDelete {
         }
     }
 
+    /**
+     * 🔹 Ejecuta un DELETE en Neo4j.
+     */
     private boolean ejecutarDeleteNeo4j(Session session, String cypherQuery) {
         if (session == null) return false;
         try (Transaction tx = session.beginTransaction()) {

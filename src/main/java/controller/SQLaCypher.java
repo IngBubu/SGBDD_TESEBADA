@@ -8,7 +8,6 @@ import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.schema.Table;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,16 +20,20 @@ public class SQLaCypher {
             }
             Statement stmt = CCJSqlParserUtil.parse(sql);
             if (stmt instanceof Select) {
+                System.out.println("✅ Consulta SQL válida para conversión a Cypher.");
                 return convertirSelect((Select) stmt);
             } else if (stmt instanceof Insert) {
+                System.out.println("✅ Consulta SQL válida para conversión a Cypher.");
                 return convertirInsert((Insert) stmt);
             } else if (stmt instanceof Update) {
+                System.out.println("✅ Consulta SQL válida para conversión a Cypher.");
                 return convertirUpdate((Update) stmt);
             } else if (stmt instanceof Delete) {
+                System.out.println("✅ Consulta SQL válida para conversión a Cypher.");
                 return convertirDelete((Delete) stmt);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("❌ Error al convertir SQL a Cypher: " + e.getMessage());
         }
         return "";
     }
@@ -51,8 +54,6 @@ public class SQLaCypher {
         return "MATCH (n:" + tabla + ")" + where + " RETURN n";
     }
 
-
-
     private String convertirInsert(Insert insertStmt) {
         String tabla = insertStmt.getTable().getName().toLowerCase();
 
@@ -65,18 +66,17 @@ public class SQLaCypher {
                 .replace("(", "").replace(")", "").split(","));
 
         // Construir el JSON de propiedades en formato Cypher
-        String atributos = "{";
+        StringBuilder atributos = new StringBuilder("{");
         for (int i = 0; i < columnas.size(); i++) {
-            atributos += columnas.get(i).trim() + ": " + valores.get(i).trim();
+            atributos.append(columnas.get(i).trim()).append(": ").append(valores.get(i).trim());
             if (i < columnas.size() - 1) {
-                atributos += ", ";
+                atributos.append(", ");
             }
         }
-        atributos += "}";
+        atributos.append("}");
 
         return "CREATE (n:" + tabla + " " + atributos + ")";
     }
-
 
     private String convertirUpdate(Update updateStmt) {
         String tabla = updateStmt.getTable().getName().toLowerCase();
@@ -94,14 +94,11 @@ public class SQLaCypher {
                     .replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");  // Prefija los campos con 'n.'
 
             // Asegurar que IdCliente es tratado como un número en Cypher
-            where = where.replace("n.idcliente =", "n.idlcliente =");
+            where = where.replace("n.idcliente =", "n.idcliente =");
         }
 
         return "MATCH (n:" + tabla + ") WHERE " + where + " SET " + setClause;
     }
-
-
-
 
     private String convertirDelete(Delete deleteStmt) {
         String tabla = deleteStmt.getTable().getName().toLowerCase();
@@ -120,5 +117,4 @@ public class SQLaCypher {
             return "MATCH (n:" + tabla + ") DELETE n"; // Borra todos los nodos de la tabla (¡cuidado!)
         }
     }
-
 }

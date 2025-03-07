@@ -1,0 +1,27 @@
+{"mapeoTablas":{
+  "clientes":{
+    "ZonaNorte":"Clientes_Norte",
+    "ZonaCentro":"Clientes_Centro",
+    "ZonaSur":"clientes"}
+},
+  "conexiones":{
+    "Norte":{
+      "BaseDatos":"Empresa_ZonaNorte",
+      "IP":"25.65.4.242",
+      "Zona":"ZonaNorte",
+      "Usuario":"sa",
+      "Password":"123456789"},
+    "Centro":{
+      "BaseDatos":"Empresa_ZonaCentro",
+      "IP":"25.5.185.106",
+      "Zona":"ZonaCentro",
+      "Usuario":"sa",
+      "Password":"123456789"},
+    "Sur":{
+      "BaseDatos":"neo4j",
+      "IP":"25.3.62.48",
+      "Zona":"ZonaSur",
+      "Usuario":"neo4j",
+      "Password":"123456789"}
+  }
+}

@@ -1,3 +1,4 @@
+// Clase Ui
 package ui;
 
 import controller.GestorDeDatos;
@@ -67,7 +68,7 @@ public class Ui extends JFrame {
             try {
                 // Verificar si la consulta es un SELECT para actualizar la tabla
                 if (consulta.toUpperCase().startsWith("SELECT")) {
-                    Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaSelect(consulta);
+                    Future<List<String[]>> futureResultados = gestorDatos.ejecutarConsultaDistribuida(consulta);
                     List<String[]> resultados = futureResultados.get();
                     String[] nombresColumnas = gestorDatos.obtenerNombresColumnas(consulta);
 
@@ -87,7 +88,6 @@ public class Ui extends JFrame {
         }).start();
     }
 
-
     private void actualizarTabla(List<String[]> datos, String[] nombresColumnas) {
         SwingUtilities.invokeLater(() -> {
             // Si la consulta no devolvió datos, mostrar un mensaje en la UI.
@@ -98,15 +98,17 @@ public class Ui extends JFrame {
                 return;
             }
 
-            // Actualizar el modelo de la tabla con los datos obtenidos
+            // Crear el modelo de la tabla con los nombres de columnas
             DefaultTableModel modelo = new DefaultTableModel(nombresColumnas, 0);
+
+            // Agregar filas con los datos obtenidos
             for (String[] fila : datos) {
                 modelo.addRow(fila);
             }
 
+            // Asignar el modelo actualizado a la tabla
             tablaResultados.setModel(modelo);
             etiquetaEstado.setText("Estado: Datos actualizados.");
         });
     }
-
 }

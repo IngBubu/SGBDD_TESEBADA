@@ -17,52 +17,30 @@ public class ConsultaSelect {
     private final Map<String, String> zonasNeo4j = new HashMap<>();
     private final SQLaCypher sqlParser = new SQLaCypher(); // Conversión de SQL a Cypher
 
-    // Agregar conexión a SQL Server
     public void agregarConexionSQL(String nombre, Connection conexion, String zona) {
         conexionesSQL.put(nombre, conexion);
         zonasSQL.put(nombre, zona);
     }
 
-    // Agregar conexión a Neo4j
     public void agregarConexionNeo4j(String nombre, Session session, String zona) {
         conexionesNeo4j.put(nombre, session);
         zonasNeo4j.put(nombre, zona);
     }
-
-    // Ejecutar consulta SELECT en todas las conexiones
-    public List<String[]> ejecutarConsultaSelect(String sql) {
-        if (!sql.trim().toUpperCase().startsWith("SELECT")) {
-            System.err.println("⚠️ La consulta no es un SELECT válido.");
-            return new ArrayList<>();
-        }
-
-        List<String[]> resultados = new ArrayList<>();
-        String[] nombresColumnas = obtenerNombresColumnas(sql);
-
-        // Ejecutar en SQL Server
-        for (Connection conn : conexionesSQL.values()) {
-            resultados.addAll(ejecutarConsultaSQL(conn, sql));
-        }
-
-        // Convertir SQL a Cypher y ejecutar en Neo4j
-        String cypherQuery = sqlParser.convertirSQLaCypher(sql);
-        for (Session session : conexionesNeo4j.values()) {
-            resultados.addAll(ejecutarConsultaNeo4j(session, cypherQuery, nombresColumnas));
-        }
-
-        System.out.println("📊 Total registros obtenidos: " + resultados.size());
-        return resultados;
+    public Map<String, Connection> getConexionesSQL() {
+        return conexionesSQL;
     }
 
-    // Obtener nombres de columnas de SQL Server
+    public Map<String, Session> getConexionesNeo4j() {
+        return conexionesNeo4j;
+    }
     public String[] obtenerNombresColumnas(String consulta) {
         if (consulta.trim().isEmpty()) {
             return new String[]{"Error: Consulta vacía"};
         }
 
         String sqlUpper = consulta.trim().toUpperCase();
+        String[] nombresColumnas = null;
 
-        // Si es una consulta SELECT, obtener las columnas
         if (sqlUpper.startsWith("SELECT")) {
             for (Connection conexion : conexionesSQL.values()) {
                 try (Statement stmt = conexion.createStatement();
@@ -70,30 +48,85 @@ public class ConsultaSelect {
 
                     ResultSetMetaData metaData = rs.getMetaData();
                     int columnas = metaData.getColumnCount();
-                    String[] nombresColumnas = new String[columnas];
+                    nombresColumnas = new String[columnas];
 
                     for (int i = 0; i < columnas; i++) {
                         nombresColumnas[i] = metaData.getColumnName(i + 1);
                     }
                     return nombresColumnas;
                 } catch (SQLException e) {
-                    System.err.println("❌ Error obteniendo nombres de columnas en SQL Server: " + e.getMessage());
+                    return new String[]{"Error obteniendo nombres de columnas"};
                 }
             }
         }
 
-        // Si no es SELECT, simplemente devuelve un mensaje neutral sin bloquear
-        return new String[]{"No aplica"};
+        return nombresColumnas != null ? nombresColumnas : new String[]{"No aplica"};
     }
 
 
-    // Ejecutar consulta en SQL Server
+    public List<String[]> ejecutarConsultaSelect(String sql, String zona) {
+        if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+            return new ArrayList<>();
+        }
+
+        List<String[]> resultados = new ArrayList<>();
+        String[] nombresColumnas = obtenerNombresColumnas(sql);
+
+        if (zonasSQL.containsValue(zona)) {
+            for (Map.Entry<String, Connection> entry : conexionesSQL.entrySet()) {
+                if (zonasSQL.get(entry.getKey()).equalsIgnoreCase(zona)) {
+                    resultados.addAll(ejecutarConsultaSQL(entry.getValue(), sql));
+                }
+            }
+        }
+
+        // ✅ Asegurar que la consulta a Neo4j se ejecuta
+        if (zonasNeo4j.containsValue(zona)) {
+            System.out.println("🟢 Preparando ejecución en Neo4j para zona: " + zona);
+            String cypherQuery = sqlParser.convertirSQLaCypher(sql);
+
+            for (Map.Entry<String, Session> entry : conexionesNeo4j.entrySet()) {
+                if (zonasNeo4j.get(entry.getKey()).equalsIgnoreCase(zona)) {
+                    System.out.println("🟢 Ejecutando en Neo4j para " + zona + ": " + cypherQuery);
+                    resultados.addAll(ejecutarConsultaNeo4j(entry.getValue(), cypherQuery, nombresColumnas));
+                }
+            }
+        } else {
+            System.err.println("❌ ERROR: No se encontró conexión para la zona: " + zona);
+        }
+
+        return resultados;
+    }
+
+
+    public List<String[]> ejecutarConsultaDistribuida(String sqlZonaNorte, String sqlZonaCentro, String sqlZonaSur) {
+        List<String[]> resultados = new ArrayList<>();
+
+        if (sqlZonaNorte != null) {
+            System.out.println("🔍 Ejecutando consulta en Zona Norte: " + sqlZonaNorte);
+            resultados.addAll(ejecutarConsultaSelect(sqlZonaNorte, "ZonaNorte"));
+        }
+        if (sqlZonaCentro != null) {
+            System.out.println("🔍 Ejecutando consulta en Zona Centro: " + sqlZonaCentro);
+            resultados.addAll(ejecutarConsultaSelect(sqlZonaCentro, "ZonaCentro"));
+        }
+        if (sqlZonaSur != null) {
+            System.out.println("🔍 Ejecutando consulta en Zona Sur: " + sqlZonaSur);
+            resultados.addAll(ejecutarConsultaSelect(sqlZonaSur, "ZonaSur"));
+        }else {
+            System.err.println("❌ ERROR: No se encontró conexión para la zona: ZonaSur");
+        }
+
+        return resultados;
+    }
+
     private List<String[]> ejecutarConsultaSQL(Connection conn, String sql) {
         List<String[]> resultados = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
             int columnas = rs.getMetaData().getColumnCount();
+
             while (rs.next()) {
                 String[] fila = new String[columnas];
                 for (int i = 0; i < columnas; i++) {
@@ -102,36 +135,45 @@ public class ConsultaSelect {
                 resultados.add(fila);
             }
         } catch (SQLException e) {
-            System.err.println("❌ Error en consulta SQL Server: " + e.getMessage());
+            return new ArrayList<>();
         }
         return resultados;
     }
 
-    // Ejecutar consulta en Neo4j
     private List<String[]> ejecutarConsultaNeo4j(Session session, String cypherQuery, String[] nombresColumnas) {
         List<String[]> resultados = new ArrayList<>();
-        System.out.println("🔎 Consulta ejecutada en Neo4j: " + cypherQuery);
+
+        System.out.println("🔎 Enviando consulta a Neo4j: " + cypherQuery);
 
         try {
             Result result = session.run(cypherQuery);
 
-            while (result.hasNext()) {
-                Record record = result.next();
-                Node nodo = record.get("n").asNode();  // Obtener el nodo
-
-                // Extraer propiedades validando tipos de datos
-                String idCliente = nodo.containsKey("idcliente") ? String.valueOf(nodo.get("idcliente").asInt()) : "null";
-                String nombre = nodo.containsKey("nombre") ? nodo.get("nombre").asString() : "null";
-                String estado = nodo.containsKey("estado") ? nodo.get("estado").asString() : "null";
-                String credito = nodo.containsKey("credito") ? String.format("%.2f", nodo.get("credito").asDouble()) : "null";
-                String deuda = nodo.containsKey("deuda") ? String.format("%.2f", nodo.get("deuda").asDouble()) : "null";
-
-                System.out.println("📌 Registro obtenido de Neo4j: " + idCliente + ", " + nombre + ", " + estado + ", " + credito + ", " + deuda);
-
-                resultados.add(new String[]{idCliente, nombre, estado, credito, deuda});
+            if (!result.hasNext()) {
+                System.out.println("⚠️ La consulta no devolvió registros en Neo4j.");
+                return resultados;
             }
 
+            System.out.println("✅ Registros encontrados en Neo4j:");
 
+            while (result.hasNext()) {
+                Record record = result.next();
+                System.out.println("🔍 Registro recibido: " + record);
+
+                if (!record.containsKey("n")) {
+                    System.out.println("⚠️ Registro sin clave 'n': " + record);
+                    continue;
+                }
+
+                Node nodo = record.get("n").asNode();
+                System.out.println("🔍 Atributos en el nodo: " + nodo.keys());
+
+                List<String> valores = new ArrayList<>();
+                for (String key : nodo.keys()) {
+                    valores.add(nodo.get(key).toString());
+                }
+
+                resultados.add(valores.toArray(new String[0]));
+            }
 
         } catch (Exception e) {
             System.err.println("❌ Error ejecutando consulta en Neo4j: " + e.getMessage());
@@ -140,5 +182,6 @@ public class ConsultaSelect {
 
         return resultados;
     }
+
 
 }

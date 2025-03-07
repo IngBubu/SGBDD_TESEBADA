@@ -169,4 +169,22 @@ public class ConsultaInsert {
                 .replace("VALUES", ") SET n =")
                 .replace(";", "");
     }
+    public boolean ejecutarTransaccionDistribuida(String sqlZonaNorte, String sqlZonaCentro, String sqlZonaSur, String tipo) {
+        try {
+            if (sqlZonaNorte != null) {
+                ejecutarInsert(sqlZonaNorte);
+            }
+            if (sqlZonaCentro != null) {
+                ejecutarInsert(sqlZonaCentro);
+            }
+            if (sqlZonaSur != null) {
+                ejecutarInsert(sqlZonaSur);
+            }
+            return true;
+        } catch (Exception e) {
+            System.err.println("❌ Error en la transacción distribuida: " + e.getMessage());
+            return false;
+        }
+    }
+
 }
