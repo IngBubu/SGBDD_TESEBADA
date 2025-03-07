@@ -17,19 +17,19 @@ public class ConsultaSelect {
     private final Map<String, String> zonasNeo4j = new HashMap<>();
     private final SQLaCypher sqlParser = new SQLaCypher(); // Conversión de SQL a Cypher
 
-    // Agregar conexión a SQL Server
+
     public void agregarConexionSQL(String nombre, Connection conexion, String zona) {
         conexionesSQL.put(nombre, conexion);
         zonasSQL.put(nombre, zona);
     }
 
-    // Agregar conexión a Neo4j
+
     public void agregarConexionNeo4j(String nombre, Session session, String zona) {
         conexionesNeo4j.put(nombre, session);
         zonasNeo4j.put(nombre, zona);
     }
 
-    // Ejecutar consulta SELECT en todas las conexiones
+    // SELECT en todas las conexiones
     public List<String[]> ejecutarConsultaSelect(String sql) {
         if (!sql.trim().toUpperCase().startsWith("SELECT")) {
             System.err.println("⚠️ La consulta no es un SELECT válido.");
@@ -54,7 +54,7 @@ public class ConsultaSelect {
         return resultados;
     }
 
-    // Obtener nombres de columnas de SQL Server
+
     public String[] obtenerNombresColumnas(String consulta) {
         if (consulta.trim().isEmpty()) {
             return new String[]{"Error: Consulta vacía"};
@@ -62,7 +62,7 @@ public class ConsultaSelect {
 
         String sqlUpper = consulta.trim().toUpperCase();
 
-        // Si es una consulta SELECT, obtener las columnas
+
         if (sqlUpper.startsWith("SELECT")) {
             for (Connection conexion : conexionesSQL.values()) {
                 try (Statement stmt = conexion.createStatement();
@@ -82,12 +82,12 @@ public class ConsultaSelect {
             }
         }
 
-        // Si no es SELECT, simplemente devuelve un mensaje neutral sin bloquear
+
         return new String[]{"No aplica"};
     }
 
 
-    // Ejecutar consulta en SQL Server
+
     private List<String[]> ejecutarConsultaSQL(Connection conn, String sql) {
         List<String[]> resultados = new ArrayList<>();
         try (PreparedStatement stmt = conn.prepareStatement(sql);
@@ -107,7 +107,7 @@ public class ConsultaSelect {
         return resultados;
     }
 
-    // Ejecutar consulta en Neo4j
+
     private List<String[]> ejecutarConsultaNeo4j(Session session, String cypherQuery, String[] nombresColumnas) {
         List<String[]> resultados = new ArrayList<>();
         System.out.println("🔎 Consulta ejecutada en Neo4j: " + cypherQuery);
@@ -119,7 +119,7 @@ public class ConsultaSelect {
                 Record record = result.next();
                 Node nodo = record.get("n").asNode();  // Obtener el nodo
 
-                // Extraer propiedades validando tipos de datos
+
                 String idCliente = nodo.containsKey("idcliente") ? String.valueOf(nodo.get("idcliente").asInt()) : "null";
                 String nombre = nodo.containsKey("nombre") ? nodo.get("nombre").asString() : "null";
                 String estado = nodo.containsKey("estado") ? nodo.get("estado").asString() : "null";

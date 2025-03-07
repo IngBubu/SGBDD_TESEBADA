@@ -34,14 +34,14 @@ public class ConsultaDelete {
 
         boolean eliminado = false;
 
-        // **🔹 Ejecutar en SQL Server**
+        // * Ejecutar en SQL Server*
         for (Connection conn : conexionesSQL.values()) {
             if (ejecutarDeleteSQL(conn, sql)) {
                 eliminado = true;
             }
         }
 
-        // **🔹 Convertir y ejecutar en Neo4j**
+        // *Convertir y ejecutar en Neo4j*
         String cypherQuery = sqlParser.convertirSQLaCypher(sql);
         System.out.println("🔹 Consulta transformada a Cypher: " + cypherQuery); // 🔹 Imprimir Cypher generado
 

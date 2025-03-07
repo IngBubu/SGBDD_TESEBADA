@@ -33,14 +33,14 @@ public class ConsultaUpdate {
             return;
         }
 
-        // **🔹 Ejecutar UPDATE en SQL Server**
+        // * Ejecutar UPDATE en SQL Server*
         for (Connection conn : participantesSQL) {
             if (ejecutarActualizacionSQL(conn, sql)) {
                 actualizado = true;
             }
         }
 
-        // **🔹 Ejecutar UPDATE en Neo4j**
+        // *Ejecutar UPDATE en Neo4j*
         String cypherQuery = sqlParser.convertirSQLaCypher(sql);
         for (Session session : participantesNeo4j) {
             if (ejecutarActualizacionNeo4j(session, cypherQuery)) {
@@ -48,7 +48,7 @@ public class ConsultaUpdate {
             }
         }
 
-        // **🔹 Commit o Rollback según el resultado**
+        // *Commit o Rollback según el resultado*
         if (actualizado) {
             commitTransaccion(participantesSQL, participantesNeo4j);
         } else {
@@ -103,7 +103,7 @@ public class ConsultaUpdate {
     }
 
     private boolean ejecutarActualizacionNeo4j(Session session, String cypherQuery) {
-        try (Transaction tx = session.beginTransaction()) { // **🔹 Cada consulta usa su propia transacción**
+        try (Transaction tx = session.beginTransaction()) { // * Cada consulta usa su propia transacción*
             tx.run(cypherQuery);
             tx.commit();
             System.out.println("✅ UPDATE en Neo4j ejecutado correctamente.");

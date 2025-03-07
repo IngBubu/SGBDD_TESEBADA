@@ -114,7 +114,6 @@ public class SQLaCypher {
     }
 
     private String transformarCondicionWhere(String where) {
-        // Asegurar que la condición WHERE mantiene los valores correctos
         return where.replaceAll("(\\b[a-zA-Z_]+\\b)\\s*=\\s*('?\\b[a-zA-Z_0-9]+\\b'?)", "n.$1 = $2");
     }
 }
