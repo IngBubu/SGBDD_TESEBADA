@@ -8,6 +8,8 @@ import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.StringValue;
 
 import java.util.Arrays;
 import java.util.List;
@@ -42,16 +44,14 @@ public class SQLaCypher {
                 .map(Object::toString)
                 .collect(Collectors.joining(", "));
 
-        // Asegurar que la condición WHERE referencia el alias 'n'
+        // Construcción correcta de WHERE
         String where = "";
         if (select.getWhere() != null) {
-            where = " WHERE " + select.getWhere().toString().replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");
+            where = " WHERE " + transformarCondicionWhere(select.getWhere().toString());
         }
 
         return "MATCH (n:" + tabla + ")" + where + " RETURN n";
     }
-
-
 
     private String convertirInsert(Insert insertStmt) {
         String tabla = insertStmt.getTable().getName().toLowerCase();
@@ -64,44 +64,42 @@ public class SQLaCypher {
         List<String> valores = Arrays.asList(insertStmt.getItemsList().toString()
                 .replace("(", "").replace(")", "").split(","));
 
-        // Construir el JSON de propiedades en formato Cypher
-        String atributos = "{";
+        // Construcción del JSON de propiedades en formato Cypher
+        StringBuilder atributos = new StringBuilder("{");
         for (int i = 0; i < columnas.size(); i++) {
-            atributos += columnas.get(i).trim() + ": " + valores.get(i).trim();
+            String valor = valores.get(i).trim();
+            // Agregar comillas a valores de texto
+            if (!valor.matches("-?\\d+(\\.\\d+)?")) {
+                valor = "'" + valor + "'";
+            }
+            atributos.append(columnas.get(i).trim()).append(": ").append(valor);
             if (i < columnas.size() - 1) {
-                atributos += ", ";
+                atributos.append(", ");
             }
         }
-        atributos += "}";
+        atributos.append("}");
 
         return "CREATE (n:" + tabla + " " + atributos + ")";
     }
 
-
     private String convertirUpdate(Update updateStmt) {
         String tabla = updateStmt.getTable().getName().toLowerCase();
 
-        // Construir la cláusula SET en Cypher
+        // Construcción de la cláusula SET en Cypher
         String setClause = updateStmt.getColumns().stream()
-                .map(col -> "n." + col + " = " + updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)))
+                .map(col -> "n." + col + " = " + (updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)) instanceof StringValue
+                        ? "'" + updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)).toString().replace("'", "") + "'"
+                        : updateStmt.getExpressions().get(updateStmt.getColumns().indexOf(col)).toString()))
                 .collect(Collectors.joining(", "));
 
-        // Construir la cláusula WHERE correctamente
+        // Construcción de la cláusula WHERE correctamente
         String where = "";
         if (updateStmt.getWhere() != null) {
-            where = updateStmt.getWhere().toString()
-                    .replace("=", " = ")  // Asegurar espacios correctos
-                    .replaceAll("(\\b[a-zA-Z_]+\\b)", "n.$1");  // Prefija los campos con 'n.'
-
-            // Asegurar que IdCliente es tratado como un número en Cypher
-            where = where.replace("n.idcliente =", "n.idlcliente =");
+            where = " WHERE " + transformarCondicionWhere(updateStmt.getWhere().toString());
         }
 
-        return "MATCH (n:" + tabla + ") WHERE " + where + " SET " + setClause;
+        return "MATCH (n:" + tabla + ")" + where + " SET " + setClause;
     }
-
-
-
 
     private String convertirDelete(Delete deleteStmt) {
         String tabla = deleteStmt.getTable().getName().toLowerCase();
@@ -109,16 +107,14 @@ public class SQLaCypher {
         // Obtener condición WHERE si existe
         String where = "";
         if (deleteStmt.getWhere() != null) {
-            where = deleteStmt.getWhere().toString().replace("=", ":"); // Reemplazar "=" por ":"
-            where = where.replaceAll("(\\w+)\\s*:", "n.$1 ="); // Asegurar que las propiedades estén referenciadas con "n."
+            where = " WHERE " + transformarCondicionWhere(deleteStmt.getWhere().toString());
         }
 
-        // Construir la consulta Cypher corregida
-        if (!where.isEmpty()) {
-            return "MATCH (n:" + tabla + ") WHERE " + where + " DELETE n";
-        } else {
-            return "MATCH (n:" + tabla + ") DELETE n"; // Borra todos los nodos de la tabla (¡cuidado!)
-        }
+        return "MATCH (n:" + tabla + ")" + where + " DELETE n";
     }
 
+    private String transformarCondicionWhere(String where) {
+        // Asegurar que la condición WHERE mantiene los valores correctos
+        return where.replaceAll("(\\b[a-zA-Z_]+\\b)\\s*=\\s*('?\\b[a-zA-Z_0-9]+\\b'?)", "n.$1 = $2");
+    }
 }

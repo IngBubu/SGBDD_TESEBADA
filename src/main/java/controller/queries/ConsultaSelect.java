@@ -125,10 +125,11 @@ public class ConsultaSelect {
                 String estado = nodo.containsKey("estado") ? nodo.get("estado").asString() : "null";
                 String credito = nodo.containsKey("credito") ? String.format("%.2f", nodo.get("credito").asDouble()) : "null";
                 String deuda = nodo.containsKey("deuda") ? String.format("%.2f", nodo.get("deuda").asDouble()) : "null";
+                String zona = nodo.containsKey("zona") ? nodo.get("zona").asString() : "null";
 
-                System.out.println("📌 Registro obtenido de Neo4j: " + idCliente + ", " + nombre + ", " + estado + ", " + credito + ", " + deuda);
+                System.out.println("📌 Registro obtenido de Neo4j: " + idCliente + ", " + nombre + ", " + estado + ", " + credito + ", " + deuda + ", " + zona);
 
-                resultados.add(new String[]{idCliente, nombre, estado, credito, deuda});
+                resultados.add(new String[]{idCliente, nombre, estado, credito, deuda, zona});
             }
 
 

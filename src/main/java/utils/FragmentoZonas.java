@@ -7,7 +7,6 @@ public class FragmentoZonas {
     private static final Map<String, String> mapaEstadosZona = new HashMap<>();
 
     static {
-        // 🔹 Mapeo de estados a zonas (ahora en minúsculas)
         mapaEstadosZona.put("durango", "ZonaNorte");
         mapaEstadosZona.put("baja california sur", "ZonaNorte");
         mapaEstadosZona.put("chihuahua", "ZonaNorte");

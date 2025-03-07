@@ -76,13 +76,13 @@ public class GestorDeDatos {
         List<Session> participantesNeo4j = new ArrayList<>(consultaInsert.getConexionesNeo4j().values());
 
         try {
-            // **🔹 Fase 1: Preparación**
+            // * Fase 1: Preparación*
             if (!fasePreparacion(participantesSQL)) {
                 System.err.println("❌ ABORTANDO: No todos los participantes están listos.");
                 return false;
             }
 
-            // **🔹 Fase 2: Ejecución**
+            // *Fase 2: Ejecución*
             switch (tipo.toUpperCase()) {
                 case "INSERT":
                     consultaInsert.ejecutarInsert(sql);
@@ -98,7 +98,7 @@ public class GestorDeDatos {
                     return false;
             }
 
-            // **🔹 Fase 3: Commit**
+            // *Fase 3: Commit*
             commitTransaccion(participantesSQL);
             return true;
         } catch (Exception e) {
@@ -108,10 +108,6 @@ public class GestorDeDatos {
         }
     }
 
-    /**
-     * **🔹 Fase de Preparación**
-     * - Solo aplica para SQL Server, ya que Neo4j maneja transacciones individuales.
-     */
     private boolean fasePreparacion(List<Connection> sqlConns) {
         try {
             for (Connection conn : sqlConns) {
@@ -129,11 +125,6 @@ public class GestorDeDatos {
         }
     }
 
-    /**
-     * **🔹 Commit en todas las bases de datos**
-     * - SQL Server: Realiza `commit()`.
-     * - Neo4j: No es necesario, ya que cada transacción se maneja independientemente en `ConsultaInsert`.
-     */
     private void commitTransaccion(List<Connection> sqlConns) {
         try {
             for (Connection conn : sqlConns) {
@@ -146,10 +137,7 @@ public class GestorDeDatos {
         }
     }
 
-    /**
-     * **🔹 Rollback en caso de fallo**
-     * - Solo afecta a SQL Server, ya que en Neo4j las consultas se manejan de forma atómica.
-     */
+
     private void rollbackTransaccion(List<Connection> sqlConns) {
         try {
             for (Connection conn : sqlConns) {
